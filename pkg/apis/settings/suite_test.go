@@ -65,6 +65,7 @@ var _ = Describe("Validation", func() {
 	It("should fail validation when batchMaxDuration is negative", func() {
 		cm := &v1.ConfigMap{
 			Data: map[string]string{
+<<<<<<< HEAD
 				"batchMaxDuration": "-10s",
 			},
 		}
@@ -72,6 +73,51 @@ var _ = Describe("Validation", func() {
 		Expect(err).To(HaveOccurred())
 	})
 	It("should fail validation when batchMaxDuration is less then 1s", func() {
+=======
+				"aws.clusterEndpoint":            "https://00000000000000000000000.gr7.us-west-2.eks.amazonaws.com",
+				"aws.clusterName":                "my-cluster",
+				"aws.defaultInstanceProfile":     "karpenter",
+				"aws.enablePodENI":               "true",
+				"aws.enableENILimitedPodDensity": "false",
+				"aws.isolatedVPC":                "true",
+				"aws.vmMemoryOverheadPercent":    "0.1",
+				"aws.tags":                       `{"tag1": "value1", "tag2": "value2", "example.com/tag": "my-value"}`,
+				"aws.reservedENIs":               "1",
+				"aws.nodeNameConvention":         "resource-name",
+			},
+		}
+		ctx, err := (&settings.Settings{}).Inject(ctx, cm)
+		Expect(err).ToNot(HaveOccurred())
+		s := settings.FromContext(ctx)
+		Expect(s.DefaultInstanceProfile).To(Equal("karpenter"))
+		Expect(s.EnablePodENI).To(BeTrue())
+		Expect(s.EnableENILimitedPodDensity).To(BeFalse())
+		Expect(s.IsolatedVPC).To(BeTrue())
+		Expect(s.VMMemoryOverheadPercent).To(Equal(0.1))
+		Expect(len(s.Tags)).To(Equal(3))
+		Expect(s.Tags).To(HaveKeyWithValue("tag1", "value1"))
+		Expect(s.Tags).To(HaveKeyWithValue("tag2", "value2"))
+		Expect(s.Tags).To(HaveKeyWithValue("example.com/tag", "my-value"))
+		Expect(s.ReservedENIs).To(Equal(1))
+	})
+	It("should succeed validation when tags contain parts of restricted domains", func() {
+		cm := &v1.ConfigMap{
+			Data: map[string]string{
+				"aws.clusterEndpoint": "https://00000000000000000000000.gr7.us-west-2.eks.amazonaws.com",
+				"aws.clusterName":     "my-cluster",
+				"aws.tags":            `{"karpenter.sh/custom-key": "value1", "karpenter.sh/managed": "true", "kubernetes.io/role/key": "value2", "kubernetes.io/cluster/other-tag/hello": "value3"}`,
+			},
+		}
+		ctx, err := (&settings.Settings{}).Inject(ctx, cm)
+		Expect(err).ToNot(HaveOccurred())
+		s := settings.FromContext(ctx)
+		Expect(s.Tags).To(HaveKeyWithValue("karpenter.sh/custom-key", "value1"))
+		Expect(s.Tags).To(HaveKeyWithValue("karpenter.sh/managed", "true"))
+		Expect(s.Tags).To(HaveKeyWithValue("kubernetes.io/role/key", "value2"))
+		Expect(s.Tags).To(HaveKeyWithValue("kubernetes.io/cluster/other-tag/hello", "value3"))
+	})
+	It("should fail validation when clusterEndpoint is invalid (not absolute)", func() {
+>>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
 		cm := &v1.ConfigMap{
 			Data: map[string]string{
 				"batchMaxDuration": "800ms",

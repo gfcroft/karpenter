@@ -1,7 +1,7 @@
 ---
 title: "Troubleshooting"
 linkTitle: "Troubleshooting"
-weight: 90
+weight: 70
 description: >
   Troubleshoot Karpenter problems
 ---
@@ -179,6 +179,17 @@ approach, and now it's much more restrictive.
 
 ## Provisioning
 
+### Instances with swap volumes fail to register with control plane
+
+Some instance types (c1.medium and m1.small) are given limited amount of memory (see [Instance Store swap volumes](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/instance-store-swap-volumes.html)). They are subsequently configured to use a swap volume, which will cause the kubelet to fail on launch. The following error can be seen in the systemd logs:
+
+```bash
+"command failed" err="failed to run Kubelet: running with swap on is not supported, please disable swap!..."
+```
+
+##### Solutions
+Disabling swap will allow kubelet to join the cluster successfully, however users should be mindful of performance, and consider adjusting the Provisioner requirements to use larger instance types.
+
 ### DaemonSets can result in deployment failures
 
 For Karpenter versions 0.5.3 and earlier, DaemonSets were not properly considered when provisioning nodes.
@@ -255,7 +266,7 @@ spec:
 
 When attempting to schedule a large number of pods with PersistentVolumes, it's possible that these pods will co-locate on the same node. Pods will report the following errors in their events using a `kubectl describe pod` call
 
-```console
+```bash
 Warning   FailedAttachVolume    pod/example-pod                      AttachVolume.Attach failed for volume "***" : rpc error: code = Internal desc = Could not attach volume "***" to node "***": attachment of disk "***" failed, expected device to be attached but was attaching
 Warning   FailedMount           pod/example-pod                      Unable to attach or mount volumes: unmounted volumes=[***], unattached volumes=[***]: timed out waiting for the condition
 ```
@@ -266,7 +277,7 @@ In this case, Karpenter may fail to scale-up your nodes due to these pods due to
 
 Karpenter does not support [in-tree storage plugins](https://kubernetes.io/blog/2021/12/10/storage-in-tree-to-csi-migration-status-update/) to provision PersistentVolumes, since nearly all of the in-tree plugins have been deprecated in upstream Kubernetes. This means that, if you are using a statically-provisioned PersistentVolume that references a volume source like `AWSElasticBlockStore` or a dynamically-provisioned PersistentVolume that references a StorageClass with a in-tree storage plugin provisioner like `kubernetes.io/aws-ebs`, Karpenter will fail to discover the maxiumum volume attachments for the node. Instead, Karpenter may think the node still has more schedulable space due to memory and cpu constraints when there is really no more schedulable space on the node due to volume limits. When Karpenter sees you are using an in-tree storage plugin on your pod volumes, it will print the following error message into the logs. If you see this message, upgrade your StorageClasses and statically-provisioned PersistentVolumes to use the latest CSI drivers for your cloud provider.
 
-```console
+```bash
 2023-04-05T23:56:53.363Z        ERROR   controller.node_state   PersistentVolume source 'AWSElasticBlockStore' uses an in-tree storage plugin which is unsupported by Karpenter and is deprecated by Kubernetes. Scale-ups may fail because Karpenter will not discover driver limits. Use a PersistentVolume that references the 'CSI' volume source for Karpenter auto-scaling support.       {"commit": "b2af562", "node": "ip-192-168-36-137.us-west-2.compute.internal", "pod": "inflate0-6c4bdb8b75-7qmfd", "volume": "mypd", "persistent-volume": "pvc-11db7489-3c6e-46f3-a958-91f9d5009d41"}
 2023-04-05T23:56:53.464Z        ERROR   controller.node_state   StorageClass .spec.provisioner uses an in-tree storage plugin which is unsupported by Karpenter and is deprecated by Kubernetes. Scale-ups may fail because Karpenter will not discover driver limits. Create a new StorageClass with a .spec.provisioner referencing the CSI driver plugin name 'ebs.csi.aws.com'.     {"commit": "b2af562", "node": "ip-192-168-36-137.us-west-2.compute.internal", "pod": "inflate0-6c4bdb8b75-7qmfd", "volume": "mypd", "storage-class": "gp2", "provisioner": "kubernetes.io/aws-ebs"}
 ```
@@ -299,7 +310,7 @@ To avoid this discrepancy between `maxPods` and the supported pod density of the
 2. Reduce your `maxPods` value to be under the maximum pod density for the instance types assigned to your Provisioner
 3. Remove the `maxPods` value from your [`kubeletConfiguration`]({{<ref "./concepts/nodepools#speckubeletconfiguration" >}}) if you no longer need it and instead rely on the defaulted values from Karpenter and EKS AMIs.
 
-For more information on pod density, view the [Pod Density Conceptual Documentation]({{<ref "./concepts/pod-density" >}}).
+For more information on pod density, view the [Pod Density Section in the NodePools doc]({{<ref "./concepts/nodepools#pod-density" >}}).
 
 #### IP exhaustion in a subnet
 
@@ -339,6 +350,24 @@ Windows requires the host OS version to match the container OS version.
 #### Solutions
 
 1. Define your pod's `nodeSelector` to ensure that your containers are scheduled on a compatible OS host version. To learn more, see [Windows container version compatibility](https://learn.microsoft.com/en-us/virtualization/windowscontainers/deploy-containers/version-compatibility).
+
+### Windows pods unable to resolve DNS
+Causes for DNS resolution failure may vary, but in the case where DNS resolution is working for Linux pods but not for Windows pods,
+then the following solution(s) may resolve your issue.
+
+#### Solution(s)
+1. Verify that the instance role of the Windows node includes the RBAC permission group `eks:kube-proxy-windows` as shown below.
+   This group is required for Windows nodes because in Windows, `kube-proxy` runs as a process on the node, and as such, the node requires the necessary RBAC cluster permissions to allow access to the resources required by `kube-proxy`.
+   For more information, see https://docs.aws.amazon.com/eks/latest/userguide/windows-support.html.
+```yaml
+...
+  username: system:node:{{EC2PrivateDNSName}}
+  groups:
+    - system:bootstrappers
+    - system:nodes
+    - eks:kube-proxy-windows # This is required for Windows DNS resolution to work
+...
+```
 
 ## Deprovisioning
 
@@ -623,4 +652,4 @@ caused by: Post "https://api.pricing.us-east-1.amazonaws.com/": dial tcp 52.94.2
 This network timeout occurs because there is no VPC endpoint available for the [Price List Query API.](https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/using-pelong.html).
 To workaround this issue, Karpenter ships updated on-demand pricing data as part of the Karpenter binary; however, this means that pricing data will only be updated on Karpenter version upgrades.
 To disable pricing lookups and avoid the error messages, set the `AWS_ISOLATED_VPC` environment variable (or the `--aws-isolated-vpc` option) to true.
-See [Environment Variables / CLI Flags]({{<ref "./concepts/settings/#environment-variables--cli-flags" >}}) for details.
+See [Environment Variables / CLI Flags]({{<ref "./reference/settings#environment-variables--cli-flags" >}}) for details.

@@ -21,8 +21,18 @@ import (
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
+<<<<<<< HEAD
 	"github.com/aws/karpenter-core/pkg/apis/settings"
 	"github.com/aws/karpenter-core/pkg/apis/v1beta1"
+=======
+	"github.com/aws/karpenter/pkg/apis/settings"
+	"github.com/aws/karpenter/pkg/apis/v1beta1"
+
+	"github.com/samber/lo"
+
+	"github.com/aws/karpenter-core/pkg/apis"
+	coresettings "github.com/aws/karpenter-core/pkg/apis/settings"
+>>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
 	"github.com/aws/karpenter-core/pkg/utils/functional"
 )
 

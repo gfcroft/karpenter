@@ -41,10 +41,17 @@ import (
 	"knative.dev/pkg/webhook/resourcesemantics/validation"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 
+<<<<<<< HEAD
 	"github.com/aws/karpenter-core/pkg/apis/v1alpha5"
 	"github.com/aws/karpenter-core/pkg/apis/v1beta1"
 	"github.com/aws/karpenter-core/pkg/operator/logging"
 	"github.com/aws/karpenter-core/pkg/operator/options"
+=======
+	corev1alpha5 "github.com/aws/karpenter-core/pkg/apis/v1alpha5"
+	"github.com/aws/karpenter/pkg/apis/v1alpha1"
+	"github.com/aws/karpenter/pkg/apis/v1alpha5"
+	"github.com/aws/karpenter/pkg/apis/v1beta1"
+>>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
 )
 
 const component = "webhook"
@@ -73,6 +80,7 @@ func NewCRDValidationWebhook(ctx context.Context, _ configmap.Watcher) *controll
 	)
 }
 
+<<<<<<< HEAD
 func NewConfigValidationWebhook(ctx context.Context, _ configmap.Watcher) *controller.Impl {
 	return configmaps.NewAdmissionController(ctx,
 		"validation.webhook.config.karpenter.sh",
@@ -168,4 +176,10 @@ func HealthProbe(ctx context.Context) healthz.Checker {
 		}
 		return nil
 	}
+=======
+var Resources = map[schema.GroupVersionKind]resourcesemantics.GenericCRD{
+	v1alpha1.SchemeGroupVersion.WithKind("AWSNodeTemplate"): &v1alpha1.AWSNodeTemplate{},
+	corev1alpha5.SchemeGroupVersion.WithKind("Provisioner"): &v1alpha5.Provisioner{},
+	v1beta1.SchemeGroupVersion.WithKind("EC2NodeClass"):     &v1beta1.EC2NodeClass{},
+>>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
 }

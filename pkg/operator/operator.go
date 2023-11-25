@@ -23,7 +23,27 @@ import (
 	"sync"
 	"time"
 
+<<<<<<< HEAD
 	coordinationv1 "k8s.io/api/coordination/v1"
+=======
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/awserr"
+	awsclient "github.com/aws/aws-sdk-go/aws/client"
+	"github.com/aws/aws-sdk-go/aws/credentials/stscreds"
+	"github.com/aws/aws-sdk-go/aws/ec2metadata"
+	"github.com/aws/aws-sdk-go/aws/endpoints"
+	"github.com/aws/aws-sdk-go/aws/request"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/aws/aws-sdk-go/service/ec2/ec2iface"
+	"github.com/aws/aws-sdk-go/service/eks"
+	"github.com/aws/aws-sdk-go/service/eks/eksiface"
+	"github.com/aws/aws-sdk-go/service/iam"
+	"github.com/aws/aws-sdk-go/service/ssm"
+	"github.com/patrickmn/go-cache"
+	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+>>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
 
 	"github.com/go-logr/zapr"
 	"github.com/samber/lo"
@@ -45,6 +65,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
+<<<<<<< HEAD
 	"github.com/aws/karpenter-core/pkg/apis"
 	"github.com/aws/karpenter-core/pkg/apis/v1beta1"
 	"github.com/aws/karpenter-core/pkg/events"
@@ -60,6 +81,37 @@ const (
 	appName   = "karpenter"
 	component = "controller"
 )
+=======
+	coreapis "github.com/aws/karpenter-core/pkg/apis"
+	"github.com/aws/karpenter-core/pkg/apis/v1alpha5"
+	corev1beta1 "github.com/aws/karpenter-core/pkg/apis/v1beta1"
+	"github.com/aws/karpenter-core/pkg/operator"
+	"github.com/aws/karpenter-core/pkg/operator/scheme"
+	"github.com/aws/karpenter/pkg/apis"
+	awscache "github.com/aws/karpenter/pkg/cache"
+	"github.com/aws/karpenter/pkg/operator/options"
+	"github.com/aws/karpenter/pkg/providers/amifamily"
+	"github.com/aws/karpenter/pkg/providers/instance"
+	"github.com/aws/karpenter/pkg/providers/instanceprofile"
+	"github.com/aws/karpenter/pkg/providers/instancetype"
+	"github.com/aws/karpenter/pkg/providers/launchtemplate"
+	"github.com/aws/karpenter/pkg/providers/pricing"
+	"github.com/aws/karpenter/pkg/providers/securitygroup"
+	"github.com/aws/karpenter/pkg/providers/subnet"
+	"github.com/aws/karpenter/pkg/providers/version"
+)
+
+func init() {
+	lo.Must0(apis.AddToScheme(scheme.Scheme))
+	v1alpha5.NormalizedLabels = lo.Assign(v1alpha5.NormalizedLabels, map[string]string{"topology.ebs.csi.aws.com/zone": corev1.LabelTopologyZone})
+	corev1beta1.NormalizedLabels = lo.Assign(corev1beta1.NormalizedLabels, map[string]string{"topology.ebs.csi.aws.com/zone": corev1.LabelTopologyZone})
+	coreapis.Settings = append(coreapis.Settings, apis.Settings...)
+}
+
+// Operator is injected into the AWS CloudProvider's factories
+type Operator struct {
+	*operator.Operator
+>>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
 
 // Version is the karpenter app version injected during compilation
 // when using the Makefile
@@ -91,6 +143,7 @@ func NewOperator() (context.Context, *Operator) {
 		debug.SetMemoryLimit(newLimit)
 	}
 
+<<<<<<< HEAD
 	// Webhook
 	ctx = webhook.WithOptions(ctx, webhook.Options{
 		Port:        options.FromContext(ctx).WebhookPort,
@@ -114,6 +167,11 @@ func NewOperator() (context.Context, *Operator) {
 	// Note: injectables are pointer to those already in context
 	for _, o := range options.Injectables {
 		o.MergeSettings(ctx)
+=======
+	if assumeRoleARN := options.FromContext(ctx).AssumeRoleARN; assumeRoleARN != "" {
+		config.Credentials = stscreds.NewCredentials(session.Must(session.NewSession()), assumeRoleARN,
+			func(provider *stscreds.AssumeRoleProvider) { setDurationAndExpiry(ctx, provider) })
+>>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
 	}
 
 	// Logging
@@ -188,6 +246,14 @@ func NewOperator() (context.Context, *Operator) {
 	lo.Must0(mgr.AddHealthzCheck("healthz", healthz.Ping))
 	lo.Must0(mgr.AddReadyzCheck("readyz", healthz.Ping))
 
+	lo.Must0(operator.Manager.GetFieldIndexer().IndexField(ctx, &corev1beta1.NodeClaim{}, "spec.nodeClassRef.name", func(o client.Object) []string {
+		nc := o.(*corev1beta1.NodeClaim)
+		if nc.Spec.NodeClassRef == nil {
+			return []string{}
+		}
+		return []string{nc.Spec.NodeClassRef.Name}
+	}), "failed to setup nodeclaim indexer")
+
 	return ctx, &Operator{
 		Manager:             mgr,
 		KubernetesInterface: kubernetesInterface,
@@ -196,11 +262,19 @@ func NewOperator() (context.Context, *Operator) {
 	}
 }
 
+<<<<<<< HEAD
 func (o *Operator) WithControllers(ctx context.Context, controllers ...controller.Controller) *Operator {
 	for _, c := range controllers {
 		lo.Must0(c.Builder(ctx, o.Manager).Complete(c))
 	}
 	return o
+=======
+// withUserAgent adds a karpenter specific user-agent string to AWS session
+func withUserAgent(sess *session.Session) *session.Session {
+	userAgent := fmt.Sprintf("karpenter.sh-%s", operator.Version)
+	sess.Handlers.Build.PushBack(request.MakeAddToUserAgentFreeFormHandler(userAgent))
+	return sess
+>>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
 }
 
 func (o *Operator) WithWebhooks(ctx context.Context, ctors ...knativeinjection.ControllerConstructor) *Operator {
@@ -212,6 +286,7 @@ func (o *Operator) WithWebhooks(ctx context.Context, ctors ...knativeinjection.C
 	return o
 }
 
+<<<<<<< HEAD
 func (o *Operator) Start(ctx context.Context) {
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
@@ -229,4 +304,57 @@ func (o *Operator) Start(ctx context.Context) {
 		}()
 	}
 	wg.Wait()
+=======
+func ResolveClusterEndpoint(ctx context.Context, eksAPI eksiface.EKSAPI) (string, error) {
+	clusterEndpointFromOptions := options.FromContext(ctx).ClusterEndpoint
+	if clusterEndpointFromOptions != "" {
+		return clusterEndpointFromOptions, nil // cluster endpoint is explicitly set
+	}
+	out, err := eksAPI.DescribeClusterWithContext(ctx, &eks.DescribeClusterInput{
+		Name: aws.String(options.FromContext(ctx).ClusterName),
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve cluster endpoint, %w", err)
+	}
+	return *out.Cluster.Endpoint, nil
+}
+
+func getCABundle(ctx context.Context, restConfig *rest.Config) (*string, error) {
+	// Discover CA Bundle from the REST client. We could alternatively
+	// have used the simpler client-go InClusterConfig() method.
+	// However, that only works when Karpenter is running as a Pod
+	// within the same cluster it's managing.
+	if caBundle := options.FromContext(ctx).ClusterCABundle; caBundle != "" {
+		return lo.ToPtr(caBundle), nil
+	}
+	transportConfig, err := restConfig.TransportConfig()
+	if err != nil {
+		return nil, fmt.Errorf("discovering caBundle, loading transport config, %w", err)
+	}
+	_, err = transport.TLSConfigFor(transportConfig) // fills in CAData!
+	if err != nil {
+		return nil, fmt.Errorf("discovering caBundle, loading TLS config, %w", err)
+	}
+	return ptr.String(base64.StdEncoding.EncodeToString(transportConfig.TLS.CAData)), nil
+}
+
+func kubeDNSIP(ctx context.Context, kubernetesInterface kubernetes.Interface) (net.IP, error) {
+	if kubernetesInterface == nil {
+		return nil, fmt.Errorf("no K8s client provided")
+	}
+	dnsService, err := kubernetesInterface.CoreV1().Services("kube-system").Get(ctx, "kube-dns", metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+	kubeDNSIP := net.ParseIP(dnsService.Spec.ClusterIP)
+	if kubeDNSIP == nil {
+		return nil, fmt.Errorf("parsing cluster IP")
+	}
+	return kubeDNSIP, nil
+}
+
+func setDurationAndExpiry(ctx context.Context, provider *stscreds.AssumeRoleProvider) {
+	provider.Duration = options.FromContext(ctx).AssumeRoleDuration
+	provider.ExpiryWindow = time.Duration(10) * time.Second
+>>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
 }

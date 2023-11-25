@@ -17,6 +17,10 @@ package options_test
 import (
 	"context"
 	"flag"
+<<<<<<< HEAD
+=======
+	"fmt"
+>>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
 	"os"
 	"testing"
 	"time"
@@ -26,6 +30,7 @@ import (
 	"github.com/samber/lo"
 	. "knative.dev/pkg/logging/testing"
 
+<<<<<<< HEAD
 	"github.com/aws/karpenter-core/pkg/apis/settings"
 	"github.com/aws/karpenter-core/pkg/operator/options"
 	"github.com/aws/karpenter-core/pkg/test"
@@ -36,6 +41,17 @@ var fs *options.FlagSet
 var opts *options.Options
 
 func TestOptions(t *testing.T) {
+=======
+	coreoptions "github.com/aws/karpenter-core/pkg/operator/options"
+	"github.com/aws/karpenter/pkg/apis/settings"
+	"github.com/aws/karpenter/pkg/operator/options"
+	"github.com/aws/karpenter/pkg/test"
+)
+
+var ctx context.Context
+
+func TestAPIs(t *testing.T) {
+>>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
 	ctx = TestContextWithLogger(t)
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Options")
@@ -44,6 +60,7 @@ func TestOptions(t *testing.T) {
 var _ = Describe("Options", func() {
 	var envState map[string]string
 	var environmentVariables = []string{
+<<<<<<< HEAD
 		"KARPENTER_SERVICE",
 		"DISABLE_WEBHOOK",
 		"WEBHOOK_PORT",
@@ -60,6 +77,22 @@ var _ = Describe("Options", func() {
 		"FEATURE_GATES",
 	}
 
+=======
+		"ASSUME_ROLE_ARN",
+		"ASSUME_ROLE_DURATION",
+		"CLUSTER_CA_BUNDLE",
+		"CLUSTER_NAME",
+		"CLUSTER_ENDPOINT",
+		"ISOLATED_VPC",
+		"VM_MEMORY_OVERHEAD_PERCENT",
+		"INTERRUPTION_QUEUE",
+		"RESERVED_ENIS",
+	}
+
+	var fs *coreoptions.FlagSet
+	var opts *options.Options
+
+>>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
 	BeforeEach(func() {
 		envState = map[string]string{}
 		for _, ev := range environmentVariables {
@@ -69,12 +102,24 @@ var _ = Describe("Options", func() {
 			}
 			os.Unsetenv(ev)
 		}
+<<<<<<< HEAD
 
 		fs = &options.FlagSet{
+=======
+		fs = &coreoptions.FlagSet{
+>>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
 			FlagSet: flag.NewFlagSet("karpenter", flag.ContinueOnError),
 		}
 		opts = &options.Options{}
 		opts.AddFlags(fs)
+<<<<<<< HEAD
+=======
+
+		// Inject default settings
+		var err error
+		ctx, err = (&settings.Settings{}).Inject(ctx, nil)
+		Expect(err).To(BeNil())
+>>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
 	})
 
 	AfterEach(func() {
@@ -86,6 +131,7 @@ var _ = Describe("Options", func() {
 		}
 	})
 
+<<<<<<< HEAD
 	Context("FeatureGates", func() {
 		DescribeTable(
 			"should successfully parse well formed feature gate strings",
@@ -301,10 +347,143 @@ var _ = Describe("Options", func() {
 			Expect(err).To(BeNil())
 			opts.MergeSettings(ctx)
 			Expect(opts.BatchIdleDuration).To(Equal(50 * time.Second))
+=======
+	Context("Merging", func() {
+		It("shouldn't overwrite options when all are set", func() {
+			err := opts.Parse(
+				fs,
+				"--assume-role-arn", "options-cluster-role",
+				"--assume-role-duration", "20m",
+				"--cluster-ca-bundle", "options-bundle",
+				"--cluster-name", "options-cluster",
+				"--cluster-endpoint", "https://options-cluster",
+				"--isolated-vpc",
+				"--vm-memory-overhead-percent", "0.1",
+				"--interruption-queue", "options-cluster",
+				"--reserved-enis", "10",
+			)
+			Expect(err).ToNot(HaveOccurred())
+			ctx = settings.ToContext(ctx, &settings.Settings{
+				AssumeRoleARN:           "settings-cluster-role",
+				AssumeRoleDuration:      time.Minute * 22,
+				ClusterCABundle:         "settings-bundle",
+				ClusterName:             "settings-cluster",
+				ClusterEndpoint:         "https://settings-cluster",
+				IsolatedVPC:             true,
+				VMMemoryOverheadPercent: 0.05,
+				InterruptionQueueName:   "settings-cluster",
+				ReservedENIs:            8,
+			})
+			opts.MergeSettings(ctx)
+			expectOptionsEqual(opts, test.Options(test.OptionsFields{
+				AssumeRoleARN:           lo.ToPtr("options-cluster-role"),
+				AssumeRoleDuration:      lo.ToPtr(20 * time.Minute),
+				ClusterCABundle:         lo.ToPtr("options-bundle"),
+				ClusterName:             lo.ToPtr("options-cluster"),
+				ClusterEndpoint:         lo.ToPtr("https://options-cluster"),
+				IsolatedVPC:             lo.ToPtr(true),
+				VMMemoryOverheadPercent: lo.ToPtr[float64](0.1),
+				InterruptionQueue:       lo.ToPtr("options-cluster"),
+				ReservedENIs:            lo.ToPtr(10),
+			}))
+
+		})
+		It("should overwrite options when none are set", func() {
+			err := opts.Parse(fs)
+			Expect(err).ToNot(HaveOccurred())
+			ctx = settings.ToContext(ctx, &settings.Settings{
+				AssumeRoleARN:           "settings-cluster-role",
+				AssumeRoleDuration:      time.Minute * 22,
+				ClusterCABundle:         "settings-bundle",
+				ClusterName:             "settings-cluster",
+				ClusterEndpoint:         "https://settings-cluster",
+				IsolatedVPC:             true,
+				VMMemoryOverheadPercent: 0.05,
+				InterruptionQueueName:   "settings-cluster",
+				ReservedENIs:            8,
+			})
+			opts.MergeSettings(ctx)
+			expectOptionsEqual(opts, test.Options(test.OptionsFields{
+				AssumeRoleARN:           lo.ToPtr("settings-cluster-role"),
+				AssumeRoleDuration:      lo.ToPtr(22 * time.Minute),
+				ClusterCABundle:         lo.ToPtr("settings-bundle"),
+				ClusterName:             lo.ToPtr("settings-cluster"),
+				ClusterEndpoint:         lo.ToPtr("https://settings-cluster"),
+				IsolatedVPC:             lo.ToPtr(true),
+				VMMemoryOverheadPercent: lo.ToPtr[float64](0.05),
+				InterruptionQueue:       lo.ToPtr("settings-cluster"),
+				ReservedENIs:            lo.ToPtr(8),
+			}))
+
+		})
+		It("should correctly merge options and settings when mixed", func() {
+			err := opts.Parse(
+				fs,
+				"--assume-role-arn", "options-cluster-role",
+				"--cluster-ca-bundle", "options-bundle",
+				"--cluster-name", "options-cluster",
+				"--cluster-endpoint", "https://options-cluster",
+				"--interruption-queue", "options-cluster",
+			)
+			Expect(err).ToNot(HaveOccurred())
+			ctx = settings.ToContext(ctx, &settings.Settings{
+				AssumeRoleARN:           "settings-cluster-role",
+				AssumeRoleDuration:      time.Minute * 20,
+				ClusterCABundle:         "settings-bundle",
+				ClusterName:             "settings-cluster",
+				ClusterEndpoint:         "https://settings-cluster",
+				IsolatedVPC:             true,
+				VMMemoryOverheadPercent: 0.1,
+				InterruptionQueueName:   "settings-cluster",
+				ReservedENIs:            10,
+			})
+			opts.MergeSettings(ctx)
+			expectOptionsEqual(opts, test.Options(test.OptionsFields{
+				AssumeRoleARN:           lo.ToPtr("options-cluster-role"),
+				AssumeRoleDuration:      lo.ToPtr(20 * time.Minute),
+				ClusterCABundle:         lo.ToPtr("options-bundle"),
+				ClusterName:             lo.ToPtr("options-cluster"),
+				ClusterEndpoint:         lo.ToPtr("https://options-cluster"),
+				IsolatedVPC:             lo.ToPtr(true),
+				VMMemoryOverheadPercent: lo.ToPtr[float64](0.1),
+				InterruptionQueue:       lo.ToPtr("options-cluster"),
+				ReservedENIs:            lo.ToPtr(10),
+			}))
+		})
+
+		It("should correctly fallback to env vars when CLI flags aren't set", func() {
+			os.Setenv("ASSUME_ROLE_ARN", "env-role")
+			os.Setenv("ASSUME_ROLE_DURATION", "20m")
+			os.Setenv("CLUSTER_CA_BUNDLE", "env-bundle")
+			os.Setenv("CLUSTER_NAME", "env-cluster")
+			os.Setenv("CLUSTER_ENDPOINT", "https://env-cluster")
+			os.Setenv("ISOLATED_VPC", "true")
+			os.Setenv("VM_MEMORY_OVERHEAD_PERCENT", "0.1")
+			os.Setenv("INTERRUPTION_QUEUE", "env-cluster")
+			os.Setenv("RESERVED_ENIS", "10")
+			fs = &coreoptions.FlagSet{
+				FlagSet: flag.NewFlagSet("karpenter", flag.ContinueOnError),
+			}
+			opts.AddFlags(fs)
+			err := opts.Parse(fs)
+			Expect(err).ToNot(HaveOccurred())
+			expectOptionsEqual(opts, test.Options(test.OptionsFields{
+				AssumeRoleARN:           lo.ToPtr("env-role"),
+				AssumeRoleDuration:      lo.ToPtr(20 * time.Minute),
+				ClusterCABundle:         lo.ToPtr("env-bundle"),
+				ClusterName:             lo.ToPtr("env-cluster"),
+				ClusterEndpoint:         lo.ToPtr("https://env-cluster"),
+				IsolatedVPC:             lo.ToPtr(true),
+				VMMemoryOverheadPercent: lo.ToPtr[float64](0.1),
+				InterruptionQueue:       lo.ToPtr("env-cluster"),
+				ReservedENIs:            lo.ToPtr(10),
+			}))
+>>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
 		})
 	})
 
 	Context("Validation", func() {
+<<<<<<< HEAD
 		DescribeTable(
 			"should parse valid log levels successfully",
 			func(level string) {
@@ -319,10 +498,38 @@ var _ = Describe("Options", func() {
 		It("should error with an invalid log level", func() {
 			err := opts.Parse(fs, "--log-level", "hello")
 			Expect(err).ToNot(BeNil())
+=======
+		It("should fail when cluster name is not set", func() {
+			err := opts.Parse(fs)
+			// Overwrite ClusterName since it is commonly set by environment variables in dev environments
+			opts.ClusterName = ""
+			Expect(err).ToNot(HaveOccurred())
+			Expect(func() {
+				opts.MergeSettings(ctx)
+				fmt.Printf("%#v", opts)
+			}).To(Panic())
+		})
+		It("should fail when assume role duration is less than 15 minutes", func() {
+			err := opts.Parse(fs, "--assume-role-duration", "1s")
+			Expect(err).To(HaveOccurred())
+		})
+		It("should fail when clusterEndpoint is invalid (not absolute)", func() {
+			err := opts.Parse(fs, "--cluster-endpoint", "00000000000000000000000.gr7.us-west-2.eks.amazonaws.com")
+			Expect(err).To(HaveOccurred())
+		})
+		It("should fail when vmMemoryOverheadPercent is negative", func() {
+			err := opts.Parse(fs, "--vm-memory-overhead-percent", "-0.01")
+			Expect(err).To(HaveOccurred())
+		})
+		It("should fail when reservedENIs is negative", func() {
+			err := opts.Parse(fs, "--reserved-enis", "-1")
+			Expect(err).To(HaveOccurred())
+>>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
 		})
 	})
 })
 
+<<<<<<< HEAD
 func expectOptionsMatch(optsA, optsB *options.Options) {
 	GinkgoHelper()
 	if optsA == nil && optsB == nil {
@@ -345,4 +552,17 @@ func expectOptionsMatch(optsA, optsB *options.Options) {
 	Expect(optsA.BatchMaxDuration).To(Equal(optsB.BatchMaxDuration))
 	Expect(optsA.BatchIdleDuration).To(Equal(optsB.BatchIdleDuration))
 	Expect(optsA.FeatureGates.Drift).To(Equal(optsB.FeatureGates.Drift))
+=======
+func expectOptionsEqual(optsA *options.Options, optsB *options.Options) {
+	GinkgoHelper()
+	Expect(optsA.AssumeRoleARN).To(Equal(optsB.AssumeRoleARN))
+	Expect(optsA.AssumeRoleDuration).To(Equal(optsB.AssumeRoleDuration))
+	Expect(optsA.ClusterCABundle).To(Equal(optsB.ClusterCABundle))
+	Expect(optsA.ClusterName).To(Equal(optsB.ClusterName))
+	Expect(optsA.ClusterEndpoint).To(Equal(optsB.ClusterEndpoint))
+	Expect(optsA.IsolatedVPC).To(Equal(optsB.IsolatedVPC))
+	Expect(optsA.VMMemoryOverheadPercent).To(Equal(optsB.VMMemoryOverheadPercent))
+	Expect(optsA.InterruptionQueue).To(Equal(optsB.InterruptionQueue))
+	Expect(optsA.ReservedENIs).To(Equal(optsB.ReservedENIs))
+>>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
 }

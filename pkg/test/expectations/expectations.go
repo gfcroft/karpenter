@@ -16,12 +16,18 @@ limitations under the License.
 package expectations
 
 import (
+<<<<<<< HEAD
 	"context"
 	"fmt"
 	"log"
 	"reflect"
 	"sync"
 	"time"
+=======
+	. "github.com/onsi/gomega"
+	"github.com/samber/lo"
+	v1 "k8s.io/api/core/v1"
+>>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
 
 	. "github.com/onsi/ginkgo/v2" //nolint:revive,stylecheck
 	. "github.com/onsi/gomega"    //nolint:revive,stylecheck

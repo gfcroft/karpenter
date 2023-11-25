@@ -22,6 +22,8 @@ import (
 	"go.uber.org/multierr"
 	v1 "k8s.io/api/core/v1"
 	"knative.dev/pkg/configmap"
+
+	coresettings "github.com/aws/karpenter-core/pkg/apis/settings"
 )
 
 type settingsKeyType struct{}
@@ -66,6 +68,7 @@ func (*Settings) Inject(ctx context.Context, cm *v1.ConfigMap) (context.Context,
 	return ToContext(ctx, s), nil
 }
 
+<<<<<<< HEAD
 func (in *Settings) Validate() (err error) {
 	if in.BatchMaxDuration < time.Second {
 		err = multierr.Append(err, fmt.Errorf("batchMaxDuration cannot be less then 1s"))
@@ -74,6 +77,10 @@ func (in *Settings) Validate() (err error) {
 		err = multierr.Append(err, fmt.Errorf("batchIdleDuration cannot be less then 1s"))
 	}
 	return err
+=======
+func (*Settings) FromContext(ctx context.Context) coresettings.Injectable {
+	return FromContext(ctx)
+>>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
 }
 
 func ToContext(ctx context.Context, s *Settings) context.Context {
@@ -87,3 +94,30 @@ func FromContext(ctx context.Context) *Settings {
 	}
 	return data.(*Settings)
 }
+<<<<<<< HEAD
+=======
+
+// AsTypedString passes the value at key through into the target, if it exists.
+func AsTypedString[T ~string](key string, target *T) configmap.ParseFunc {
+	return func(data map[string]string) error {
+		if raw, ok := data[key]; ok {
+			*target = T(raw)
+		}
+		return nil
+	}
+}
+
+// AsStringMap parses a value as a JSON map of map[string]string.
+func AsStringMap(key string, target *map[string]string) configmap.ParseFunc {
+	return func(data map[string]string) error {
+		if raw, ok := data[key]; ok && raw != "" {
+			m := map[string]string{}
+			if err := json.Unmarshal([]byte(raw), &m); err != nil {
+				return err
+			}
+			*target = m
+		}
+		return nil
+	}
+}
+>>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13

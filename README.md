@@ -15,6 +15,7 @@ Karpenter improves the efficiency and cost of running workloads on Kubernetes cl
 * **Provisioning** nodes that meet the requirements of the pods
 * **Removing** the nodes when the nodes are no longer needed
 
+<<<<<<< HEAD
 ## Community, discussion, contribution, and support
 
 If you have any questions or want to get the latest project news, you can connect with us in the following ways:
@@ -34,6 +35,11 @@ See also our [contributor guide](CONTRIBUTING.md) and the Kubernetes [community 
 ### Code of conduct
 
 Participation in the Kubernetes community is governed by the [Kubernetes Code of Conduct](code-of-conduct.md).
+=======
+Come discuss Karpenter in the [#karpenter](https://kubernetes.slack.com/archives/C02SFFZSA2K) channel, in the [Kubernetes slack](https://slack.k8s.io/) or join the [Karpenter working group](https://karpenter.sh/docs/contributing/working-group/) bi-weekly calls. If you want to contribute to the Karpenter project, please refer to the Karpenter docs.
+
+Check out the [Docs](https://karpenter.sh/docs/) to learn more.
+>>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
 
 ## Talks
 - 09/08/2022 [Workload Consolidation with Karpenter](https://youtu.be/BnksdJ3oOEs)

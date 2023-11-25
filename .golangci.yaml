@@ -42,8 +42,13 @@ linters-settings:
     check-shadowing: true
   revive:
     rules:
+<<<<<<< HEAD
       - name: dot-imports
         disabled: true
+=======
+    - name: dot-imports
+      disabled: true
+>>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
   stylecheck:
     dot-import-whitelist:
       - "github.com/onsi/ginkgo/v2"

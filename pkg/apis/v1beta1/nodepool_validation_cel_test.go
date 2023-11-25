@@ -15,13 +15,18 @@ limitations under the License.
 package v1beta1_test
 
 import (
+<<<<<<< HEAD
 	"fmt"
 	"strings"
 	"time"
+=======
+	"strings"
+>>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
 
 	"github.com/Pallinder/go-randomdata"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+<<<<<<< HEAD
 	"github.com/samber/lo"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -34,23 +39,47 @@ import (
 
 var _ = Describe("CEL/Validation", func() {
 	var nodePool *NodePool
+=======
+	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/sets"
+
+	"github.com/aws/karpenter-core/pkg/apis/v1beta1"
+)
+
+var _ = Describe("CEL/Validation", func() {
+	var nodePool *v1beta1.NodePool
+>>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
 
 	BeforeEach(func() {
 		if env.Version.Minor() < 25 {
 			Skip("CEL Validation is for 1.25>")
 		}
+<<<<<<< HEAD
 		nodePool = &NodePool{
 			ObjectMeta: metav1.ObjectMeta{Name: strings.ToLower(randomdata.SillyName())},
 			Spec: NodePoolSpec{
 				Template: NodeClaimTemplate{
 					Spec: NodeClaimSpec{
 						NodeClassRef: &NodeClassReference{
+=======
+		nodePool = &v1beta1.NodePool{
+			ObjectMeta: metav1.ObjectMeta{Name: strings.ToLower(randomdata.SillyName())},
+			Spec: v1beta1.NodePoolSpec{
+				Template: v1beta1.NodeClaimTemplate{
+					Spec: v1beta1.NodeClaimSpec{
+						NodeClassRef: &v1beta1.NodeClassReference{
+>>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
 							Kind: "NodeClaim",
 							Name: "default",
 						},
 						Requirements: []v1.NodeSelectorRequirement{
 							{
+<<<<<<< HEAD
 								Key:      CapacityTypeLabelKey,
+=======
+								Key:      v1beta1.CapacityTypeLabelKey,
+>>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
 								Operator: v1.NodeSelectorOpExists,
 							},
 						},
@@ -59,6 +88,7 @@ var _ = Describe("CEL/Validation", func() {
 			},
 		}
 	})
+<<<<<<< HEAD
 	Context("Disruption", func() {
 		It("should fail on negative expireAfter", func() {
 			nodePool.Spec.Disruption.ExpireAfter.Duration = lo.ToPtr(lo.Must(time.ParseDuration("-1s")))
@@ -508,6 +538,12 @@ var _ = Describe("CEL/Validation", func() {
 		It("should allow restricted domains exceptions", func() {
 			oldNodePool := nodePool.DeepCopy()
 			for label := range LabelDomainExceptions {
+=======
+	Context("Requirements", func() {
+		It("should allow restricted domains exceptions", func() {
+			oldNodePool := nodePool.DeepCopy()
+			for label := range v1beta1.LabelDomainExceptions {
+>>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
 				nodePool.Spec.Template.Spec.Requirements = []v1.NodeSelectorRequirement{
 					{Key: label + "/test", Operator: v1.NodeSelectorOpIn, Values: []string{"test"}},
 				}
@@ -517,6 +553,7 @@ var _ = Describe("CEL/Validation", func() {
 				nodePool = oldNodePool.DeepCopy()
 			}
 		})
+<<<<<<< HEAD
 		It("should allow restricted subdomains exceptions", func() {
 			oldNodePool := nodePool.DeepCopy()
 			for label := range LabelDomainExceptions {
@@ -532,6 +569,11 @@ var _ = Describe("CEL/Validation", func() {
 		It("should allow well known label exceptions", func() {
 			oldNodePool := nodePool.DeepCopy()
 			for label := range WellKnownLabels.Difference(sets.New(NodePoolLabelKey)) {
+=======
+		It("should allow well known label exceptions", func() {
+			oldNodePool := nodePool.DeepCopy()
+			for label := range v1beta1.WellKnownLabels.Difference(sets.New(v1beta1.NodePoolLabelKey)) {
+>>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
 				nodePool.Spec.Template.Spec.Requirements = []v1.NodeSelectorRequirement{
 					{Key: label, Operator: v1.NodeSelectorOpIn, Values: []string{"test"}},
 				}
@@ -541,6 +583,7 @@ var _ = Describe("CEL/Validation", func() {
 				nodePool = oldNodePool.DeepCopy()
 			}
 		})
+<<<<<<< HEAD
 		It("should allow non-empty set after removing overlapped value", func() {
 			nodePool.Spec.Template.Spec.Requirements = []v1.NodeSelectorRequirement{
 				{Key: v1.LabelTopologyZone, Operator: v1.NodeSelectorOpIn, Values: []string{"test", "foo"}},
@@ -665,6 +708,31 @@ var _ = Describe("CEL/Validation", func() {
 				Expect(env.Client.Create(ctx, nodePool)).To(Succeed())
 				Expect(env.Client.Delete(ctx, nodePool)).To(Succeed())
 				Expect(nodePool.RuntimeValidate()).To(Succeed())
+=======
+	})
+	Context("Labels", func() {
+		It("should allow restricted domains exceptions", func() {
+			oldNodePool := nodePool.DeepCopy()
+			for label := range v1beta1.LabelDomainExceptions {
+				nodePool.Spec.Template.Labels = map[string]string{
+					label: "test",
+				}
+				Expect(env.Client.Create(ctx, nodePool)).To(Succeed())
+				Expect(nodePool.RuntimeValidate()).To(Succeed())
+				Expect(env.Client.Delete(ctx, nodePool)).To(Succeed())
+				nodePool = oldNodePool.DeepCopy()
+			}
+		})
+		It("should allow well known label exceptions", func() {
+			oldNodePool := nodePool.DeepCopy()
+			for label := range v1beta1.WellKnownLabels.Difference(sets.New(v1beta1.NodePoolLabelKey)) {
+				nodePool.Spec.Template.Labels = map[string]string{
+					label: "test",
+				}
+				Expect(env.Client.Create(ctx, nodePool)).To(Succeed())
+				Expect(nodePool.RuntimeValidate()).To(Succeed())
+				Expect(env.Client.Delete(ctx, nodePool)).To(Succeed())
+>>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
 				nodePool = oldNodePool.DeepCopy()
 			}
 		})

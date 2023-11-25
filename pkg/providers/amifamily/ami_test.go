@@ -29,14 +29,15 @@ import (
 	v1 "k8s.io/api/core/v1"
 	. "knative.dev/pkg/logging/testing"
 
-	coresettings "github.com/aws/karpenter-core/pkg/apis/settings"
-	"github.com/aws/karpenter-core/pkg/apis/v1alpha5"
+	corev1beta1 "github.com/aws/karpenter-core/pkg/apis/v1beta1"
+	coreoptions "github.com/aws/karpenter-core/pkg/operator/options"
 	"github.com/aws/karpenter-core/pkg/operator/scheme"
 	"github.com/aws/karpenter-core/pkg/scheduling"
 	coretest "github.com/aws/karpenter-core/pkg/test"
 	"github.com/aws/karpenter/pkg/apis"
 	"github.com/aws/karpenter/pkg/apis/settings"
 	"github.com/aws/karpenter/pkg/apis/v1beta1"
+	"github.com/aws/karpenter/pkg/operator/options"
 	"github.com/aws/karpenter/pkg/providers/amifamily"
 	"github.com/aws/karpenter/pkg/test"
 )
@@ -61,7 +62,8 @@ const (
 
 var _ = BeforeSuite(func() {
 	env = coretest.NewEnvironment(scheme.Scheme, coretest.WithCRDs(apis.CRDs...))
-	ctx = coresettings.ToContext(ctx, coretest.Settings())
+	ctx = coreoptions.ToContext(ctx, coretest.Options())
+	ctx = options.ToContext(ctx, test.Options())
 	ctx = settings.ToContext(ctx, test.Settings())
 	awsEnv = test.NewEnvironment(ctx, env)
 })
@@ -244,27 +246,6 @@ var _ = Describe("AMIProvider", func() {
 				},
 			})
 		})
-		It("should succeed to resolve tags as requirements for NodeTemplates", func() {
-			nodeClass.Spec.AMISelectorTerms = []v1beta1.AMISelectorTerm{
-				{
-					Tags: map[string]string{"*": "*"},
-				},
-			}
-			nodeClass.IsNodeTemplate = true
-			amis, err := awsEnv.AMIProvider.Get(ctx, nodeClass, &amifamily.Options{})
-			Expect(err).ToNot(HaveOccurred())
-			Expect(amis).To(HaveLen(1))
-			Expect(amis).To(ConsistOf(amifamily.AMI{
-				Name:         aws.StringValue(img.Name),
-				AmiID:        aws.StringValue(img.ImageId),
-				CreationDate: aws.StringValue(img.CreationDate),
-				Requirements: scheduling.NewRequirements(
-					scheduling.NewRequirement(v1.LabelArchStable, v1.NodeSelectorOpIn, v1alpha5.ArchitectureAmd64),
-					scheduling.NewRequirement(v1.LabelInstanceTypeStable, v1.NodeSelectorOpIn, "m5.large"),
-					scheduling.NewRequirement(v1.LabelTopologyZone, v1.NodeSelectorOpIn, "test-zone-1a"),
-				),
-			}))
-		})
 		It("should succeed to not resolve tags as requirements for NodeClasses", func() {
 			nodeClass.Spec.AMISelectorTerms = []v1beta1.AMISelectorTerm{
 				{
@@ -279,13 +260,15 @@ var _ = Describe("AMIProvider", func() {
 				AmiID:        aws.StringValue(img.ImageId),
 				CreationDate: aws.StringValue(img.CreationDate),
 				Requirements: scheduling.NewRequirements(
-					scheduling.NewRequirement(v1.LabelArchStable, v1.NodeSelectorOpIn, v1alpha5.ArchitectureAmd64),
+					scheduling.NewRequirement(v1.LabelArchStable, v1.NodeSelectorOpIn, corev1beta1.ArchitectureAmd64),
 				),
 			}))
 		})
 	})
 	Context("AMI Selectors", func() {
-		It("should have default owners and use tags when prefixes aren't set", func() {
+		// When you tag public or shared resources, the tags you assign are available only to your AWS account; no other AWS account will have access to those tags
+		// https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/Using_Tags.html#tag-restrictions
+		It("should have empty owners and use tags when prefixes aren't set", func() {
 			amiSelectorTerms := []v1beta1.AMISelectorTerm{
 				{
 					Tags: map[string]string{
@@ -302,10 +285,7 @@ var _ = Describe("AMIProvider", func() {
 							Values: aws.StringSlice([]string{"my-ami"}),
 						},
 					},
-					Owners: []string{
-						"amazon",
-						"self",
-					},
+					Owners: []string{},
 				},
 			}, filterAndOwnersSets)
 		})

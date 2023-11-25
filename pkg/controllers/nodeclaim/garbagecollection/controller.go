@@ -32,6 +32,7 @@ import (
 	"github.com/aws/karpenter-core/pkg/cloudprovider"
 	corecontroller "github.com/aws/karpenter-core/pkg/operator/controller"
 	nodeclaimutil "github.com/aws/karpenter-core/pkg/utils/nodeclaim"
+<<<<<<< HEAD
 )
 
 type Controller struct {
@@ -45,6 +46,22 @@ func NewController(c clock.Clock, kubeClient client.Client, cloudProvider cloudp
 		clock:         c,
 		kubeClient:    kubeClient,
 		cloudProvider: cloudProvider,
+=======
+	"github.com/aws/karpenter/pkg/cloudprovider"
+)
+
+type Controller struct {
+	kubeClient      client.Client
+	cloudProvider   *cloudprovider.CloudProvider
+	successfulCount uint64 // keeps track of successful reconciles for more aggressive requeueing near the start of the controller
+}
+
+func NewController(kubeClient client.Client, cloudProvider *cloudprovider.CloudProvider) *Controller {
+	return &Controller{
+		kubeClient:      kubeClient,
+		cloudProvider:   cloudProvider,
+		successfulCount: 0,
+>>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
 	}
 }
 
@@ -61,6 +78,7 @@ func (c *Controller) Reconcile(ctx context.Context, _ reconcile.Request) (reconc
 	if err != nil {
 		return reconcile.Result{}, err
 	}
+<<<<<<< HEAD
 	cloudProviderNodeClaims = lo.Filter(cloudProviderNodeClaims, func(nc *v1beta1.NodeClaim, _ int) bool {
 		return nc.DeletionTimestamp.IsZero()
 	})
@@ -73,6 +91,24 @@ func (c *Controller) Reconcile(ctx context.Context, _ reconcile.Request) (reconc
 			c.clock.Since(n.StatusConditions().GetCondition(v1beta1.Launched).LastTransitionTime.Inner.Time) > time.Second*10 &&
 			!cloudProviderProviderIDs.Has(n.Status.ProviderID)
 	})
+=======
+	resolvedProviderIDs := sets.New[string](lo.FilterMap(nodeClaimList.Items, func(n v1beta1.NodeClaim, _ int) (string, bool) {
+		return n.Status.ProviderID, n.Status.ProviderID != ""
+	})...)
+	errs := make([]error, len(retrieved))
+	workqueue.ParallelizeUntil(ctx, 100, len(managedRetrieved), func(i int) {
+		if !resolvedProviderIDs.Has(managedRetrieved[i].Status.ProviderID) &&
+			time.Since(managedRetrieved[i].CreationTimestamp.Time) > time.Second*30 {
+			errs[i] = c.garbageCollect(ctx, managedRetrieved[i], nodeList)
+		}
+	})
+	if err = multierr.Combine(errs...); err != nil {
+		return reconcile.Result{}, err
+	}
+	c.successfulCount++
+	return reconcile.Result{RequeueAfter: lo.Ternary(c.successfulCount <= 20, time.Second*10, time.Minute*2)}, nil
+}
+>>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
 
 	errs := make([]error, len(nodeClaims))
 	workqueue.ParallelizeUntil(ctx, 20, len(nodeClaims), func(i int) {
