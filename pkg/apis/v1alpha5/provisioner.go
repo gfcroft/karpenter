@@ -15,72 +15,135 @@ limitations under the License.
 package v1alpha5
 
 import (
-	"context"
+	"encoding/json"
+	"fmt"
+	"sort"
 
-	"github.com/aws/aws-sdk-go/service/ec2"
-	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
+	"github.com/mitchellh/hashstructure/v2"
+	"github.com/samber/lo"
 	v1 "k8s.io/api/core/v1"
-	"knative.dev/pkg/apis"
-
-	"github.com/aws/karpenter-core/pkg/apis/v1alpha5"
-	"github.com/aws/karpenter-core/pkg/scheduling"
-	"github.com/aws/karpenter/pkg/apis/v1alpha1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"knative.dev/pkg/ptr"
 )
 
-// Provisioner is an alias type for additional validation
-// +kubebuilder:object:root=true
-type Provisioner v1alpha5.Provisioner
-
-func (p *Provisioner) SupportedVerbs() []admissionregistrationv1.OperationType {
-	return []admissionregistrationv1.OperationType{
-		admissionregistrationv1.Create,
-		admissionregistrationv1.Update,
-	}
+// ProvisionerSpec is the top level provisioner specification. Provisioners
+// launch nodes in response to pods that are unschedulable. A single provisioner
+// is capable of managing a diverse set of nodes. Node properties are determined
+// from a combination of provisioner and pod scheduling constraints.
+type ProvisionerSpec struct {
+	// Annotations are applied to every node.
+	//+optional
+	Annotations map[string]string `json:"annotations,omitempty"`
+	// Labels are layered with Requirements and applied to every node.
+	//+optional
+	Labels map[string]string `json:"labels,omitempty"`
+	// Taints will be applied to every node launched by the Provisioner. If
+	// specified, the provisioner will not provision nodes for pods that do not
+	// have matching tolerations. Additional taints will be created that match
+	// pod tolerations on a per-node basis.
+	// +optional
+	Taints []v1.Taint `json:"taints,omitempty"`
+	// StartupTaints are taints that are applied to nodes upon startup which are expected to be removed automatically
+	// within a short period of time, typically by a DaemonSet that tolerates the taint. These are commonly used by
+	// daemonsets to allow initialization and enforce startup ordering.  StartupTaints are ignored for provisioning
+	// purposes in that pods are not required to tolerate a StartupTaint in order to have nodes provisioned for them.
+	// +optional
+	StartupTaints []v1.Taint `json:"startupTaints,omitempty"`
+	// Requirements are layered with Labels and applied to every node.
+	Requirements []v1.NodeSelectorRequirement `json:"requirements,omitempty" hash:"ignore"`
+	// KubeletConfiguration are options passed to the kubelet when provisioning nodes
+	//+optional
+	KubeletConfiguration *KubeletConfiguration `json:"kubeletConfiguration,omitempty"`
+	// Provider contains fields specific to your cloudprovider.
+	// +kubebuilder:pruning:PreserveUnknownFields
+	Provider *Provider `json:"provider,omitempty" hash:"ignore"`
+	// ProviderRef is a reference to a dedicated CRD for the chosen provider, that holds
+	// additional configuration options
+	// +optional
+	ProviderRef *MachineTemplateRef `json:"providerRef,omitempty" hash:"ignore"`
+	// TTLSecondsAfterEmpty is the number of seconds the controller will wait
+	// before attempting to delete a node, measured from when the node is
+	// detected to be empty. A Node is considered to be empty when it does not
+	// have pods scheduled to it, excluding daemonsets.
+	//
+	// Termination due to no utilization is disabled if this field is not set.
+	// +optional
+	TTLSecondsAfterEmpty *int64 `json:"ttlSecondsAfterEmpty,omitempty" hash:"ignore"`
+	// TTLSecondsUntilExpired is the number of seconds the controller will wait
+	// before terminating a node, measured from when the node is created. This
+	// is useful to implement features like eventually consistent node upgrade,
+	// memory leak protection, and disruption testing.
+	//
+	// Termination due to expiration is disabled if this field is not set.
+	// +optional
+	TTLSecondsUntilExpired *int64 `json:"ttlSecondsUntilExpired,omitempty" hash:"ignore"`
+	// Limits define a set of bounds for provisioning capacity.
+	Limits *Limits `json:"limits,omitempty" hash:"ignore"`
+	// Weight is the priority given to the provisioner during scheduling. A higher
+	// numerical weight indicates that this provisioner will be ordered
+	// ahead of other provisioners with lower weights. A provisioner with no weight
+	// will be treated as if it is a provisioner with a weight of 0.
+	// +kubebuilder:validation:Minimum:=1
+	// +kubebuilder:validation:Maximum:=100
+	// +optional
+	Weight *int32 `json:"weight,omitempty" hash:"ignore"`
+	// Consolidation are the consolidation parameters
+	// +optional
+	Consolidation *Consolidation `json:"consolidation,omitempty" hash:"ignore"`
 }
 
-func (p *Provisioner) Validate(_ context.Context) (errs *apis.FieldError) {
-	if p.Spec.Provider == nil {
+func (p *Provisioner) Hash() string {
+	hash, _ := hashstructure.Hash(p.Spec, hashstructure.FormatV2, &hashstructure.HashOptions{
+		SlicesAsSets:    true,
+		IgnoreZeroValue: true,
+		ZeroNil:         true,
+	})
+	return fmt.Sprint(hash)
+}
+
+type Consolidation struct {
+	// Enabled enables consolidation if it has been set
+	Enabled *bool `json:"enabled,omitempty"`
+}
+
+// +kubebuilder:object:generate=false
+type Provider = runtime.RawExtension
+
+func ProviderAnnotation(p *Provider) map[string]string {
+	if p == nil {
 		return nil
 	}
-	provider, err := v1alpha1.DeserializeProvider(p.Spec.Provider.Raw)
-	if err != nil {
-		return apis.ErrGeneric(err.Error())
-	}
-	return provider.Validate()
+	raw := lo.Must(json.Marshal(p)) // Provider should already have been validated so this shouldn't fail
+	return map[string]string{ProviderCompatabilityAnnotationKey: string(raw)}
 }
 
-func (p *Provisioner) SetDefaults(_ context.Context) {
-	requirements := scheduling.NewNodeSelectorRequirements(p.Spec.Requirements...)
+// Provisioner is the Schema for the Provisioners API
+// +kubebuilder:object:root=true
+// +kubebuilder:resource:path=provisioners,scope=Cluster,categories=karpenter
+// +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Template",type="string",JSONPath=".spec.providerRef.name",description=""
+// +kubebuilder:printcolumn:name="Weight",type="string",JSONPath=".spec.weight",priority=1,description=""
+type Provisioner struct {
+	metav1.TypeMeta   `json:",inline"`
+	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	// default to linux OS
-	if !requirements.Has(v1.LabelOSStable) {
-		p.Spec.Requirements = append(p.Spec.Requirements, v1.NodeSelectorRequirement{
-			Key: v1.LabelOSStable, Operator: v1.NodeSelectorOpIn, Values: []string{string(v1.Linux)},
-		})
-	}
+	Spec   ProvisionerSpec   `json:"spec,omitempty"`
+	Status ProvisionerStatus `json:"status,omitempty"`
+}
 
-	// default to amd64
-	if !requirements.Has(v1.LabelArchStable) {
-		p.Spec.Requirements = append(p.Spec.Requirements, v1.NodeSelectorRequirement{
-			Key: v1.LabelArchStable, Operator: v1.NodeSelectorOpIn, Values: []string{v1alpha5.ArchitectureAmd64},
-		})
-	}
+// ProvisionerList contains a list of Provisioner
+// +kubebuilder:object:root=true
+type ProvisionerList struct {
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
+	Items           []Provisioner `json:"items"`
+}
 
-	// default to on-demand
-	if !requirements.Has(v1alpha5.LabelCapacityType) {
-		p.Spec.Requirements = append(p.Spec.Requirements, v1.NodeSelectorRequirement{
-			Key: v1alpha5.LabelCapacityType, Operator: v1.NodeSelectorOpIn, Values: []string{ec2.DefaultTargetCapacityTypeOnDemand},
-		})
-	}
-
-	// default to C, M, R categories if no instance type constraints are specified
-	if !requirements.Has(v1.LabelInstanceTypeStable) &&
-		!requirements.Has(v1alpha1.LabelInstanceFamily) &&
-		!requirements.Has(v1alpha1.LabelInstanceCategory) &&
-		!requirements.Has(v1alpha1.LabelInstanceGeneration) {
-		p.Spec.Requirements = append(p.Spec.Requirements, []v1.NodeSelectorRequirement{
-			{Key: v1alpha1.LabelInstanceCategory, Operator: v1.NodeSelectorOpIn, Values: []string{"c", "m", "r"}},
-			{Key: v1alpha1.LabelInstanceGeneration, Operator: v1.NodeSelectorOpGt, Values: []string{"2"}},
-		}...)
-	}
+// OrderByWeight orders the provisioners in the ProvisionerList
+// by their priority weight in-place
+func (pl *ProvisionerList) OrderByWeight() {
+	sort.Slice(pl.Items, func(a, b int) bool {
+		return ptr.Int32Value(pl.Items[a].Spec.Weight) > ptr.Int32Value(pl.Items[b].Spec.Weight)
+	})
 }

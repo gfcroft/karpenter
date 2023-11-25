@@ -16,10 +16,10 @@ package settings
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
+	"go.uber.org/multierr"
 	v1 "k8s.io/api/core/v1"
 	"knative.dev/pkg/configmap"
 )
@@ -29,36 +29,17 @@ type settingsKeyType struct{}
 var ContextKey = settingsKeyType{}
 
 var defaultSettings = &Settings{
-	AssumeRoleARN:              "",
-	AssumeRoleDuration:         time.Minute * 15,
-	ClusterCABundle:            "",
-	ClusterName:                "",
-	ClusterEndpoint:            "",
-	DefaultInstanceProfile:     "",
-	EnablePodENI:               false,
-	EnableENILimitedPodDensity: true,
-	IsolatedVPC:                false,
-	VMMemoryOverheadPercent:    0.075,
-	InterruptionQueueName:      "",
-	Tags:                       map[string]string{},
-	ReservedENIs:               0,
+	BatchMaxDuration:  time.Second * 10,
+	BatchIdleDuration: time.Second,
+	DriftEnabled:      false,
 }
 
 // +k8s:deepcopy-gen=true
 type Settings struct {
-	AssumeRoleARN              string
-	AssumeRoleDuration         time.Duration
-	ClusterCABundle            string
-	ClusterName                string
-	ClusterEndpoint            string
-	DefaultInstanceProfile     string
-	EnablePodENI               bool
-	EnableENILimitedPodDensity bool
-	IsolatedVPC                bool
-	VMMemoryOverheadPercent    float64
-	InterruptionQueueName      string
-	Tags                       map[string]string
-	ReservedENIs               int
+	BatchMaxDuration  time.Duration
+	BatchIdleDuration time.Duration
+	// This feature flag is temporary and will be removed in the near future.
+	DriftEnabled bool
 }
 
 func (*Settings) ConfigMap() string {
@@ -68,21 +49,14 @@ func (*Settings) ConfigMap() string {
 // Inject creates a Settings from the supplied ConfigMap
 func (*Settings) Inject(ctx context.Context, cm *v1.ConfigMap) (context.Context, error) {
 	s := defaultSettings.DeepCopy()
+	if cm == nil {
+		return ToContext(ctx, s), nil
+	}
 
 	if err := configmap.Parse(cm.Data,
-		configmap.AsString("aws.assumeRoleARN", &s.AssumeRoleARN),
-		configmap.AsDuration("aws.assumeRoleDuration", &s.AssumeRoleDuration),
-		configmap.AsString("aws.clusterCABundle", &s.ClusterCABundle),
-		configmap.AsString("aws.clusterName", &s.ClusterName),
-		configmap.AsString("aws.clusterEndpoint", &s.ClusterEndpoint),
-		configmap.AsString("aws.defaultInstanceProfile", &s.DefaultInstanceProfile),
-		configmap.AsBool("aws.enablePodENI", &s.EnablePodENI),
-		configmap.AsBool("aws.enableENILimitedPodDensity", &s.EnableENILimitedPodDensity),
-		configmap.AsBool("aws.isolatedVPC", &s.IsolatedVPC),
-		configmap.AsFloat64("aws.vmMemoryOverheadPercent", &s.VMMemoryOverheadPercent),
-		configmap.AsString("aws.interruptionQueueName", &s.InterruptionQueueName),
-		AsStringMap("aws.tags", &s.Tags),
-		configmap.AsInt("aws.reservedENIs", &s.ReservedENIs),
+		configmap.AsDuration("batchMaxDuration", &s.BatchMaxDuration),
+		configmap.AsDuration("batchIdleDuration", &s.BatchIdleDuration),
+		configmap.AsBool("featureGates.driftEnabled", &s.DriftEnabled),
 	); err != nil {
 		return ctx, fmt.Errorf("parsing settings, %w", err)
 	}
@@ -92,6 +66,16 @@ func (*Settings) Inject(ctx context.Context, cm *v1.ConfigMap) (context.Context,
 	return ToContext(ctx, s), nil
 }
 
+func (in *Settings) Validate() (err error) {
+	if in.BatchMaxDuration < time.Second {
+		err = multierr.Append(err, fmt.Errorf("batchMaxDuration cannot be less then 1s"))
+	}
+	if in.BatchIdleDuration < time.Second {
+		err = multierr.Append(err, fmt.Errorf("batchIdleDuration cannot be less then 1s"))
+	}
+	return err
+}
+
 func ToContext(ctx context.Context, s *Settings) context.Context {
 	return context.WithValue(ctx, ContextKey, s)
 }
@@ -99,32 +83,7 @@ func ToContext(ctx context.Context, s *Settings) context.Context {
 func FromContext(ctx context.Context) *Settings {
 	data := ctx.Value(ContextKey)
 	if data == nil {
-		// This is developer error if this happens, so we should panic
-		panic("settings doesn't exist in context")
+		panic("settings not in context")
 	}
 	return data.(*Settings)
-}
-
-// AsTypedString passes the value at key through into the target, if it exists.
-func AsTypedString[T ~string](key string, target *T) configmap.ParseFunc {
-	return func(data map[string]string) error {
-		if raw, ok := data[key]; ok {
-			*target = T(raw)
-		}
-		return nil
-	}
-}
-
-// AsStringMap parses a value as a JSON map of map[string]string.
-func AsStringMap(key string, target *map[string]string) configmap.ParseFunc {
-	return func(data map[string]string) error {
-		if raw, ok := data[key]; ok {
-			m := map[string]string{}
-			if err := json.Unmarshal([]byte(raw), &m); err != nil {
-				return err
-			}
-			*target = m
-		}
-		return nil
-	}
 }

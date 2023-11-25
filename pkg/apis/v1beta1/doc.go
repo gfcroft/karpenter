@@ -15,5 +15,5 @@ limitations under the License.
 // +k8s:openapi-gen=true
 // +k8s:deepcopy-gen=package,register
 // +k8s:defaulter-gen=TypeMeta
-// +groupName=karpenter.k8s.aws
+// +groupName=karpenter.sh
 package v1beta1 // doc.go is discovered by codegen

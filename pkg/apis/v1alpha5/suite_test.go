@@ -16,398 +16,712 @@ package v1alpha5_test
 
 import (
 	"context"
-	"math"
+	"fmt"
+	"strings"
 	"testing"
+	"time"
+
+	"k8s.io/apimachinery/pkg/api/resource"
 
 	"github.com/Pallinder/go-randomdata"
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/service/ec2"
+	"github.com/mitchellh/hashstructure/v2"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	"github.com/samber/lo"
-	"go.uber.org/multierr"
-	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	. "knative.dev/pkg/logging/testing"
+	"knative.dev/pkg/ptr"
 
-	"github.com/aws/karpenter-core/pkg/apis/v1alpha5"
-	"github.com/aws/karpenter-core/pkg/scheduling"
+	. "github.com/aws/karpenter-core/pkg/apis/v1alpha5"
 	"github.com/aws/karpenter-core/pkg/test"
-	"github.com/aws/karpenter/pkg/apis/v1alpha1"
-	apisv1alpha5 "github.com/aws/karpenter/pkg/apis/v1alpha5"
+
+	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/sets"
 )
 
 var ctx context.Context
 
-func TestV1Alpha5(t *testing.T) {
-	RegisterFailHandler(Fail)
-	RunSpecs(t, "v1alpha5")
+func TestAPIs(t *testing.T) {
 	ctx = TestContextWithLogger(t)
+	RegisterFailHandler(Fail)
+	RunSpecs(t, "Validation")
 }
 
-var _ = Describe("Provisioner", func() {
-	var provisioner *v1alpha5.Provisioner
+var _ = Describe("Validation", func() {
+	var provisioner *Provisioner
 
 	BeforeEach(func() {
-		provisioner = test.Provisioner(test.ProvisionerOptions{Provider: &v1alpha1.AWS{
-			SubnetSelector:        map[string]string{"*": "*"},
-			SecurityGroupSelector: map[string]string{"*": "*"},
-		}})
+		provisioner = &Provisioner{
+			ObjectMeta: metav1.ObjectMeta{Name: strings.ToLower(randomdata.SillyName())},
+			Spec: ProvisionerSpec{
+				ProviderRef: &MachineTemplateRef{
+					Kind: "NodeTemplate",
+					Name: "default",
+				},
+			},
+		}
 	})
 
-	Context("SetDefaults", func() {
-		It("should default OS to linux", func() {
-			SetDefaults(ctx, provisioner)
-			Expect(scheduling.NewNodeSelectorRequirements(provisioner.Spec.Requirements...).Get(v1.LabelOSStable)).
-				To(Equal(scheduling.NewRequirement(v1.LabelOSStable, v1.NodeSelectorOpIn, string(v1.Linux))))
+	It("should fail on negative expiry ttl", func() {
+		provisioner.Spec.TTLSecondsUntilExpired = ptr.Int64(-1)
+		Expect(provisioner.Validate(ctx)).ToNot(Succeed())
+	})
+	It("should succeed on a missing expiry ttl", func() {
+		// this already is true, but to be explicit
+		provisioner.Spec.TTLSecondsUntilExpired = nil
+		Expect(provisioner.Validate(ctx)).To(Succeed())
+	})
+	It("should fail on negative empty ttl", func() {
+		provisioner.Spec.TTLSecondsAfterEmpty = ptr.Int64(-1)
+		Expect(provisioner.Validate(ctx)).ToNot(Succeed())
+	})
+	It("should succeed on a missing empty ttl", func() {
+		provisioner.Spec.TTLSecondsAfterEmpty = nil
+		Expect(provisioner.Validate(ctx)).To(Succeed())
+	})
+	It("should succeed on a valid empty ttl", func() {
+		provisioner.Spec.TTLSecondsAfterEmpty = ptr.Int64(30)
+		Expect(provisioner.Validate(ctx)).To(Succeed())
+	})
+	It("should fail if both consolidation and TTLSecondsAfterEmpty are enabled", func() {
+		provisioner.Spec.TTLSecondsAfterEmpty = ptr.Int64(30)
+		provisioner.Spec.Consolidation = &Consolidation{Enabled: ptr.Bool(true)}
+		Expect(provisioner.Validate(ctx)).ToNot(Succeed())
+	})
+	It("should succeed if consolidation is off and TTLSecondsAfterEmpty is set", func() {
+		provisioner.Spec.TTLSecondsAfterEmpty = ptr.Int64(30)
+		provisioner.Spec.Consolidation = &Consolidation{Enabled: ptr.Bool(false)}
+		Expect(provisioner.Validate(ctx)).To(Succeed())
+	})
+	It("should succeed if consolidation is on and TTLSecondsAfterEmpty is not set", func() {
+		provisioner.Spec.TTLSecondsAfterEmpty = nil
+		provisioner.Spec.Consolidation = &Consolidation{Enabled: ptr.Bool(true)}
+		Expect(provisioner.Validate(ctx)).To(Succeed())
+	})
+
+	Context("Limits", func() {
+		It("should allow undefined limits", func() {
+			provisioner.Spec.Limits = &Limits{}
+			Expect(provisioner.Validate(ctx)).To(Succeed())
 		})
-		It("should not default OS if set", func() {
-			provisioner.Spec.Requirements = append(provisioner.Spec.Requirements,
-				v1.NodeSelectorRequirement{Key: v1.LabelOSStable, Operator: v1.NodeSelectorOpDoesNotExist})
-			SetDefaults(ctx, provisioner)
-			Expect(scheduling.NewNodeSelectorRequirements(provisioner.Spec.Requirements...).Get(v1.LabelOSStable)).
-				To(Equal(scheduling.NewRequirement(v1.LabelOSStable, v1.NodeSelectorOpDoesNotExist)))
+		It("should allow empty limits", func() {
+			provisioner.Spec.Limits = &Limits{Resources: v1.ResourceList{}}
+			Expect(provisioner.Validate(ctx)).To(Succeed())
 		})
-		It("should default architecture to amd64", func() {
-			SetDefaults(ctx, provisioner)
-			Expect(scheduling.NewNodeSelectorRequirements(provisioner.Spec.Requirements...).Get(v1.LabelArchStable)).
-				To(Equal(scheduling.NewRequirement(v1.LabelArchStable, v1.NodeSelectorOpIn, v1alpha5.ArchitectureAmd64)))
+	})
+	Context("Provider", func() {
+		It("should not allow provider and providerRef", func() {
+			provisioner.Spec.Provider = &Provider{}
+			provisioner.Spec.ProviderRef = &MachineTemplateRef{Name: "providerRef"}
+			Expect(provisioner.Validate(ctx)).ToNot(Succeed())
 		})
-		It("should not default architecture if set", func() {
-			provisioner.Spec.Requirements = append(provisioner.Spec.Requirements,
-				v1.NodeSelectorRequirement{Key: v1.LabelArchStable, Operator: v1.NodeSelectorOpDoesNotExist})
-			SetDefaults(ctx, provisioner)
-			Expect(scheduling.NewNodeSelectorRequirements(provisioner.Spec.Requirements...).Get(v1.LabelArchStable)).
-				To(Equal(scheduling.NewRequirement(v1.LabelArchStable, v1.NodeSelectorOpDoesNotExist)))
+		It("should require at least one of provider and providerRef", func() {
+			provisioner.Spec.ProviderRef = nil
+			Expect(provisioner.Validate(ctx)).ToNot(Succeed())
 		})
-		It("should default capacity-type to on-demand", func() {
-			SetDefaults(ctx, provisioner)
-			Expect(scheduling.NewNodeSelectorRequirements(provisioner.Spec.Requirements...).Get(v1alpha5.LabelCapacityType)).
-				To(Equal(scheduling.NewRequirement(v1alpha5.LabelCapacityType, v1.NodeSelectorOpIn, v1alpha1.CapacityTypeOnDemand)))
+	})
+	Context("Labels", func() {
+		It("should allow unrecognized labels", func() {
+			provisioner.Spec.Labels = map[string]string{"foo": randomdata.SillyName()}
+			Expect(provisioner.Validate(ctx)).To(Succeed())
 		})
-		It("should not default capacity-type if set", func() {
-			provisioner.Spec.Requirements = append(provisioner.Spec.Requirements,
-				v1.NodeSelectorRequirement{Key: v1alpha5.LabelCapacityType, Operator: v1.NodeSelectorOpDoesNotExist})
-			SetDefaults(ctx, provisioner)
-			Expect(scheduling.NewNodeSelectorRequirements(provisioner.Spec.Requirements...).Get(v1alpha5.LabelCapacityType)).
-				To(Equal(scheduling.NewRequirement(v1alpha5.LabelCapacityType, v1.NodeSelectorOpDoesNotExist)))
+		It("should fail for the provisioner name label", func() {
+			provisioner.Spec.Labels = map[string]string{ProvisionerNameLabelKey: randomdata.SillyName()}
+			Expect(provisioner.Validate(ctx)).ToNot(Succeed())
 		})
-		It("should default instance-category, generation to c m r, gen>1", func() {
-			SetDefaults(ctx, provisioner)
-			Expect(scheduling.NewNodeSelectorRequirements(provisioner.Spec.Requirements...).Get(v1alpha1.LabelInstanceCategory)).
-				To(Equal(scheduling.NewRequirement(v1alpha1.LabelInstanceCategory, v1.NodeSelectorOpIn, "c", "m", "r")))
-			Expect(scheduling.NewNodeSelectorRequirements(provisioner.Spec.Requirements...).Get(v1alpha1.LabelInstanceGeneration)).
-				To(Equal(scheduling.NewRequirement(v1alpha1.LabelInstanceGeneration, v1.NodeSelectorOpGt, "2")))
+		It("should fail for invalid label keys", func() {
+			provisioner.Spec.Labels = map[string]string{"spaces are not allowed": randomdata.SillyName()}
+			Expect(provisioner.Validate(ctx)).ToNot(Succeed())
 		})
-		It("should not default instance-category, generation if set", func() {
-			provisioner.Spec.Requirements = append(provisioner.Spec.Requirements,
-				v1.NodeSelectorRequirement{Key: v1alpha1.LabelInstanceCategory, Operator: v1.NodeSelectorOpExists})
-			SetDefaults(ctx, provisioner)
-			Expect(scheduling.NewNodeSelectorRequirements(provisioner.Spec.Requirements...).Get(v1alpha1.LabelInstanceCategory)).
-				To(Equal(scheduling.NewRequirement(v1alpha1.LabelInstanceCategory, v1.NodeSelectorOpExists)))
-			Expect(scheduling.NewNodeSelectorRequirements(provisioner.Spec.Requirements...).Get(v1alpha1.LabelInstanceGeneration)).
-				To(Equal(scheduling.NewRequirement(v1alpha1.LabelInstanceGeneration, v1.NodeSelectorOpExists)))
+		It("should fail for invalid label values", func() {
+			provisioner.Spec.Labels = map[string]string{randomdata.SillyName(): "/ is not allowed"}
+			Expect(provisioner.Validate(ctx)).ToNot(Succeed())
 		})
-		It("should not default instance-category if any instance label is set", func() {
-			for _, label := range []string{v1.LabelInstanceTypeStable, v1alpha1.LabelInstanceFamily} {
-				provisioner.Spec.Requirements = []v1.NodeSelectorRequirement{{Key: label, Operator: v1.NodeSelectorOpIn, Values: []string{"test"}}}
-				SetDefaults(ctx, provisioner)
-				Expect(scheduling.NewNodeSelectorRequirements(provisioner.Spec.Requirements...).Get(label)).
-					To(Equal(scheduling.NewRequirement(label, v1.NodeSelectorOpIn, "test")))
-				Expect(scheduling.NewNodeSelectorRequirements(provisioner.Spec.Requirements...).Get(v1alpha1.LabelInstanceCategory)).
-					To(Equal(scheduling.NewRequirement(v1alpha1.LabelInstanceCategory, v1.NodeSelectorOpExists)))
-				Expect(scheduling.NewNodeSelectorRequirements(provisioner.Spec.Requirements...).Get(v1alpha1.LabelInstanceGeneration)).
-					To(Equal(scheduling.NewRequirement(v1alpha1.LabelInstanceGeneration, v1.NodeSelectorOpExists)))
+		It("should fail for restricted label domains", func() {
+			for label := range RestrictedLabelDomains {
+				provisioner.Spec.Labels = map[string]string{label + "/unknown": randomdata.SillyName()}
+				Expect(provisioner.Validate(ctx)).ToNot(Succeed())
+			}
+		})
+		It("should allow labels kOps require", func() {
+			provisioner.Spec.Labels = map[string]string{
+				"kops.k8s.io/instancegroup": "karpenter-nodes",
+				"kops.k8s.io/gpu":           "1",
+			}
+			Expect(provisioner.Validate(ctx)).To(Succeed())
+		})
+		It("should allow labels in restricted domains exceptions list", func() {
+			for label := range LabelDomainExceptions {
+				provisioner.Spec.Labels = map[string]string{
+					label: "test-value",
+				}
+				Expect(provisioner.Validate(ctx)).To(Succeed())
+			}
+		})
+		It("should allow labels prefixed with the restricted domain exceptions", func() {
+			for label := range LabelDomainExceptions {
+				provisioner.Spec.Labels = map[string]string{
+					fmt.Sprintf("%s/key", label): "test-value",
+				}
+				Expect(provisioner.Validate(ctx)).To(Succeed())
 			}
 		})
 	})
-
-	Context("Validate", func() {
-
-		It("should validate", func() {
-			Expect(provisioner.Validate(ctx)).To(Succeed())
-		})
-		It("should succeed if provider undefined", func() {
-			provisioner.Spec.Provider = nil
-			provisioner.Spec.ProviderRef = &v1alpha5.MachineTemplateRef{
-				Kind: "AWSNodeTemplate",
-				Name: "default",
+	Context("Taints", func() {
+		It("should succeed for valid taints", func() {
+			provisioner.Spec.Taints = []v1.Taint{
+				{Key: "a", Value: "b", Effect: v1.TaintEffectNoSchedule},
+				{Key: "c", Value: "d", Effect: v1.TaintEffectNoExecute},
+				{Key: "e", Value: "f", Effect: v1.TaintEffectPreferNoSchedule},
+				{Key: "key-only", Effect: v1.TaintEffectNoExecute},
 			}
 			Expect(provisioner.Validate(ctx)).To(Succeed())
 		})
-
-		Context("SubnetSelector", func() {
-			It("should not allow empty string keys or values", func() {
-				provider, err := v1alpha1.DeserializeProvider(provisioner.Spec.Provider.Raw)
-				Expect(err).ToNot(HaveOccurred())
-				for key, value := range map[string]string{
-					"":    "value",
-					"key": "",
-				} {
-					provider.SubnetSelector = map[string]string{key: value}
-					Expect(Validate(ctx, test.Provisioner(test.ProvisionerOptions{Provider: provider}))).ToNot(Succeed())
-				}
-			})
+		It("should fail for invalid taint keys", func() {
+			provisioner.Spec.Taints = []v1.Taint{{Key: "???"}}
+			Expect(provisioner.Validate(ctx)).ToNot(Succeed())
 		})
-		Context("SecurityGroupSelector", func() {
-			It("should not allow with a custom launch template", func() {
-				provider, err := v1alpha1.DeserializeProvider(provisioner.Spec.Provider.Raw)
-				Expect(err).ToNot(HaveOccurred())
-				provider.LaunchTemplateName = aws.String("my-lt")
-				provider.SecurityGroupSelector = map[string]string{"key": "value"}
-				Expect(Validate(ctx, test.Provisioner(test.ProvisionerOptions{Provider: provider}))).ToNot(Succeed())
-			})
-			It("should not allow empty string keys or values", func() {
-				provider, err := v1alpha1.DeserializeProvider(provisioner.Spec.Provider.Raw)
-				Expect(err).ToNot(HaveOccurred())
-				for key, value := range map[string]string{
-					"":    "value",
-					"key": "",
-				} {
-					provider.SecurityGroupSelector = map[string]string{key: value}
-					provisioner = test.Provisioner(test.ProvisionerOptions{Provider: provider})
-					Expect(Validate(ctx, test.Provisioner(test.ProvisionerOptions{Provider: provider}))).ToNot(Succeed())
-				}
-			})
+		It("should fail for missing taint key", func() {
+			provisioner.Spec.Taints = []v1.Taint{{Effect: v1.TaintEffectNoSchedule}}
+			Expect(provisioner.Validate(ctx)).ToNot(Succeed())
 		})
-
-		Context("Labels", func() {
-			It("should not allow unrecognized labels with the aws label prefix", func() {
-				provisioner.Spec.Labels = map[string]string{v1alpha1.LabelDomain + "/" + randomdata.SillyName(): randomdata.SillyName()}
-				Expect(Validate(ctx, provisioner)).ToNot(Succeed())
-			})
-			It("should support well known labels", func() {
-				for _, label := range []string{
-					v1alpha1.LabelInstanceHypervisor,
-					v1alpha1.LabelInstanceFamily,
-					v1alpha1.LabelInstanceSize,
-					v1alpha1.LabelInstanceCPU,
-					v1alpha1.LabelInstanceMemory,
-					v1alpha1.LabelInstanceGPUName,
-					v1alpha1.LabelInstanceGPUManufacturer,
-					v1alpha1.LabelInstanceGPUCount,
-					v1alpha1.LabelInstanceGPUMemory,
-					v1alpha1.LabelInstanceAcceleratorName,
-					v1alpha1.LabelInstanceAcceleratorManufacturer,
-					v1alpha1.LabelInstanceAcceleratorCount,
-				} {
-					provisioner.Spec.Labels = map[string]string{label: randomdata.SillyName()}
+		It("should fail for invalid taint value", func() {
+			provisioner.Spec.Taints = []v1.Taint{{Key: "invalid-value", Effect: v1.TaintEffectNoSchedule, Value: "???"}}
+			Expect(provisioner.Validate(ctx)).ToNot(Succeed())
+		})
+		It("should fail for invalid taint effect", func() {
+			provisioner.Spec.Taints = []v1.Taint{{Key: "invalid-effect", Effect: "???"}}
+			Expect(provisioner.Validate(ctx)).ToNot(Succeed())
+		})
+		It("should not fail for same key with different effects", func() {
+			provisioner.Spec.Taints = []v1.Taint{
+				{Key: "a", Effect: v1.TaintEffectNoSchedule},
+				{Key: "a", Effect: v1.TaintEffectNoExecute},
+			}
+			Expect(provisioner.Validate(ctx)).To(Succeed())
+		})
+		It("should fail for duplicate taint key/effect pairs", func() {
+			provisioner.Spec.Taints = []v1.Taint{
+				{Key: "a", Effect: v1.TaintEffectNoSchedule},
+				{Key: "a", Effect: v1.TaintEffectNoSchedule},
+			}
+			Expect(provisioner.Validate(ctx)).ToNot(Succeed())
+			provisioner.Spec.Taints = []v1.Taint{
+				{Key: "a", Effect: v1.TaintEffectNoSchedule},
+			}
+			provisioner.Spec.StartupTaints = []v1.Taint{
+				{Key: "a", Effect: v1.TaintEffectNoSchedule},
+			}
+			Expect(provisioner.Validate(ctx)).ToNot(Succeed())
+		})
+	})
+	Context("Requirements", func() {
+		It("should fail for the provisioner name label", func() {
+			provisioner.Spec.Requirements = []v1.NodeSelectorRequirement{
+				{Key: ProvisionerNameLabelKey, Operator: v1.NodeSelectorOpIn, Values: []string{randomdata.SillyName()}},
+			}
+			Expect(provisioner.Validate(ctx)).ToNot(Succeed())
+		})
+		It("should allow supported ops", func() {
+			provisioner.Spec.Requirements = []v1.NodeSelectorRequirement{
+				{Key: v1.LabelTopologyZone, Operator: v1.NodeSelectorOpIn, Values: []string{"test"}},
+				{Key: v1.LabelTopologyZone, Operator: v1.NodeSelectorOpGt, Values: []string{"1"}},
+				{Key: v1.LabelTopologyZone, Operator: v1.NodeSelectorOpLt, Values: []string{"1"}},
+				{Key: v1.LabelTopologyZone, Operator: v1.NodeSelectorOpNotIn},
+				{Key: v1.LabelTopologyZone, Operator: v1.NodeSelectorOpExists},
+			}
+			Expect(provisioner.Validate(ctx)).To(Succeed())
+		})
+		It("should fail for unsupported ops", func() {
+			for _, op := range []v1.NodeSelectorOperator{"unknown"} {
+				provisioner.Spec.Requirements = []v1.NodeSelectorRequirement{
+					{Key: v1.LabelTopologyZone, Operator: op, Values: []string{"test"}},
+				}
+				Expect(provisioner.Validate(ctx)).ToNot(Succeed())
+			}
+		})
+		It("should fail for restricted domains", func() {
+			for label := range RestrictedLabelDomains {
+				provisioner.Spec.Requirements = []v1.NodeSelectorRequirement{
+					{Key: label + "/test", Operator: v1.NodeSelectorOpIn, Values: []string{"test"}},
+				}
+				Expect(provisioner.Validate(ctx)).ToNot(Succeed())
+			}
+		})
+		It("should allow restricted domains exceptions", func() {
+			for label := range LabelDomainExceptions {
+				provisioner.Spec.Requirements = []v1.NodeSelectorRequirement{
+					{Key: label + "/test", Operator: v1.NodeSelectorOpIn, Values: []string{"test"}},
+				}
+				Expect(provisioner.Validate(ctx)).To(Succeed())
+			}
+		})
+		It("should allow well known label exceptions", func() {
+			for label := range WellKnownLabels.Difference(sets.New(ProvisionerNameLabelKey)) {
+				provisioner.Spec.Requirements = []v1.NodeSelectorRequirement{
+					{Key: label, Operator: v1.NodeSelectorOpIn, Values: []string{"test"}},
+				}
+				Expect(provisioner.Validate(ctx)).To(Succeed())
+			}
+		})
+		It("should allow non-empty set after removing overlapped value", func() {
+			provisioner.Spec.Requirements = []v1.NodeSelectorRequirement{
+				{Key: v1.LabelTopologyZone, Operator: v1.NodeSelectorOpIn, Values: []string{"test", "foo"}},
+				{Key: v1.LabelTopologyZone, Operator: v1.NodeSelectorOpNotIn, Values: []string{"test", "bar"}},
+			}
+			Expect(provisioner.Validate(ctx)).To(Succeed())
+		})
+		It("should allow empty requirements", func() {
+			provisioner.Spec.Requirements = []v1.NodeSelectorRequirement{}
+			Expect(provisioner.Validate(ctx)).To(Succeed())
+		})
+		It("should fail with invalid GT or LT values", func() {
+			for _, requirement := range []v1.NodeSelectorRequirement{
+				{Key: v1.LabelTopologyZone, Operator: v1.NodeSelectorOpGt, Values: []string{}},
+				{Key: v1.LabelTopologyZone, Operator: v1.NodeSelectorOpGt, Values: []string{"1", "2"}},
+				{Key: v1.LabelTopologyZone, Operator: v1.NodeSelectorOpGt, Values: []string{"a"}},
+				{Key: v1.LabelTopologyZone, Operator: v1.NodeSelectorOpGt, Values: []string{"-1"}},
+				{Key: v1.LabelTopologyZone, Operator: v1.NodeSelectorOpLt, Values: []string{}},
+				{Key: v1.LabelTopologyZone, Operator: v1.NodeSelectorOpLt, Values: []string{"1", "2"}},
+				{Key: v1.LabelTopologyZone, Operator: v1.NodeSelectorOpLt, Values: []string{"a"}},
+				{Key: v1.LabelTopologyZone, Operator: v1.NodeSelectorOpLt, Values: []string{"-1"}},
+			} {
+				provisioner.Spec.Requirements = []v1.NodeSelectorRequirement{requirement}
+				Expect(provisioner.Validate(ctx)).ToNot(Succeed())
+			}
+		})
+	})
+	Context("KubeletConfiguration", func() {
+		It("should fail on kubeReserved with invalid keys", func() {
+			provisioner.Spec.KubeletConfiguration = &KubeletConfiguration{
+				KubeReserved: v1.ResourceList{
+					v1.ResourcePods: resource.MustParse("2"),
+				},
+			}
+			Expect(provisioner.Validate(ctx)).ToNot(Succeed())
+		})
+		It("should fail on systemReserved with invalid keys", func() {
+			provisioner.Spec.KubeletConfiguration = &KubeletConfiguration{
+				SystemReserved: v1.ResourceList{
+					v1.ResourcePods: resource.MustParse("2"),
+				},
+			}
+			Expect(provisioner.Validate(ctx)).ToNot(Succeed())
+		})
+		Context("Eviction Signals", func() {
+			Context("Eviction Hard", func() {
+				It("should succeed on evictionHard with valid keys", func() {
+					provisioner.Spec.KubeletConfiguration = &KubeletConfiguration{
+						EvictionHard: map[string]string{
+							"memory.available":   "5%",
+							"nodefs.available":   "10%",
+							"nodefs.inodesFree":  "15%",
+							"imagefs.available":  "5%",
+							"imagefs.inodesFree": "5%",
+							"pid.available":      "5%",
+						},
+					}
 					Expect(provisioner.Validate(ctx)).To(Succeed())
-				}
+				})
+				It("should fail on evictionHard with invalid keys", func() {
+					provisioner.Spec.KubeletConfiguration = &KubeletConfiguration{
+						EvictionHard: map[string]string{
+							"memory": "5%",
+						},
+					}
+					Expect(provisioner.Validate(ctx)).ToNot(Succeed())
+				})
+				It("should fail on invalid formatted percentage value in evictionHard", func() {
+					provisioner.Spec.KubeletConfiguration = &KubeletConfiguration{
+						EvictionHard: map[string]string{
+							"memory.available": "5%3",
+						},
+					}
+					Expect(provisioner.Validate(ctx)).ToNot(Succeed())
+				})
+				It("should fail on invalid percentage value (too large) in evictionHard", func() {
+					provisioner.Spec.KubeletConfiguration = &KubeletConfiguration{
+						EvictionHard: map[string]string{
+							"memory.available": "110%",
+						},
+					}
+					Expect(provisioner.Validate(ctx)).ToNot(Succeed())
+				})
+				It("should fail on invalid quantity value in evictionHard", func() {
+					provisioner.Spec.KubeletConfiguration = &KubeletConfiguration{
+						EvictionHard: map[string]string{
+							"memory.available": "110GB",
+						},
+					}
+					Expect(provisioner.Validate(ctx)).ToNot(Succeed())
+				})
 			})
 		})
-		Context("MetadataOptions", func() {
-			It("should not allow with a custom launch template", func() {
-				provider, err := v1alpha1.DeserializeProvider(provisioner.Spec.Provider.Raw)
-				Expect(err).ToNot(HaveOccurred())
-				provider.LaunchTemplateName = aws.String("my-lt")
-				provider.MetadataOptions = &v1alpha1.MetadataOptions{}
-				provisioner = test.Provisioner(test.ProvisionerOptions{Provider: provider})
-				Expect(Validate(ctx, test.Provisioner(test.ProvisionerOptions{Provider: provider}))).ToNot(Succeed())
-			})
-			It("should allow missing values", func() {
-				provider, err := v1alpha1.DeserializeProvider(provisioner.Spec.Provider.Raw)
-				Expect(err).ToNot(HaveOccurred())
-				provider.MetadataOptions = &v1alpha1.MetadataOptions{}
-				provisioner = test.Provisioner(test.ProvisionerOptions{Provider: provider})
+		Context("Eviction Soft", func() {
+			It("should succeed on evictionSoft with valid keys", func() {
+				provisioner.Spec.KubeletConfiguration = &KubeletConfiguration{
+					EvictionSoft: map[string]string{
+						"memory.available":   "5%",
+						"nodefs.available":   "10%",
+						"nodefs.inodesFree":  "15%",
+						"imagefs.available":  "5%",
+						"imagefs.inodesFree": "5%",
+						"pid.available":      "5%",
+					},
+					EvictionSoftGracePeriod: map[string]metav1.Duration{
+						"memory.available":   {Duration: time.Minute},
+						"nodefs.available":   {Duration: time.Second * 90},
+						"nodefs.inodesFree":  {Duration: time.Minute * 5},
+						"imagefs.available":  {Duration: time.Hour},
+						"imagefs.inodesFree": {Duration: time.Hour * 24},
+						"pid.available":      {Duration: time.Minute},
+					},
+				}
 				Expect(provisioner.Validate(ctx)).To(Succeed())
 			})
-			Context("HTTPEndpoint", func() {
-				It("should allow enum values", func() {
-					provider, err := v1alpha1.DeserializeProvider(provisioner.Spec.Provider.Raw)
-					Expect(err).ToNot(HaveOccurred())
-					for i := range ec2.LaunchTemplateInstanceMetadataEndpointState_Values() {
-						value := ec2.LaunchTemplateInstanceMetadataEndpointState_Values()[i]
-						provider.MetadataOptions = &v1alpha1.MetadataOptions{
-							HTTPEndpoint: &value,
-						}
-						provisioner = test.Provisioner(test.ProvisionerOptions{Provider: provider})
-						Expect(provisioner.Validate(ctx)).To(Succeed())
-					}
-				})
-				It("should not allow non-enum values", func() {
-					provider, err := v1alpha1.DeserializeProvider(provisioner.Spec.Provider.Raw)
-					Expect(err).ToNot(HaveOccurred())
-					provider.MetadataOptions = &v1alpha1.MetadataOptions{
-						HTTPEndpoint: aws.String(randomdata.SillyName()),
-					}
-					provisioner = test.Provisioner(test.ProvisionerOptions{Provider: provider})
-					Expect(Validate(ctx, test.Provisioner(test.ProvisionerOptions{Provider: provider}))).ToNot(Succeed())
-				})
+			It("should fail on evictionSoft with invalid keys", func() {
+				provisioner.Spec.KubeletConfiguration = &KubeletConfiguration{
+					EvictionSoft: map[string]string{
+						"memory": "5%",
+					},
+					EvictionSoftGracePeriod: map[string]metav1.Duration{
+						"memory": {Duration: time.Minute},
+					},
+				}
+				Expect(provisioner.Validate(ctx)).ToNot(Succeed())
 			})
-			Context("HTTPProtocolIpv6", func() {
-				It("should allow enum values", func() {
-					provider, err := v1alpha1.DeserializeProvider(provisioner.Spec.Provider.Raw)
-					Expect(err).ToNot(HaveOccurred())
-					for i := range ec2.LaunchTemplateInstanceMetadataProtocolIpv6_Values() {
-						value := ec2.LaunchTemplateInstanceMetadataProtocolIpv6_Values()[i]
-						provider.MetadataOptions = &v1alpha1.MetadataOptions{
-							HTTPProtocolIPv6: &value,
-						}
-						provisioner = test.Provisioner(test.ProvisionerOptions{Provider: provider})
-						Expect(provisioner.Validate(ctx)).To(Succeed())
-					}
-				})
-				It("should not allow non-enum values", func() {
-					provider, err := v1alpha1.DeserializeProvider(provisioner.Spec.Provider.Raw)
-					Expect(err).ToNot(HaveOccurred())
-					provider.MetadataOptions = &v1alpha1.MetadataOptions{
-						HTTPProtocolIPv6: aws.String(randomdata.SillyName()),
-					}
-					provisioner = test.Provisioner(test.ProvisionerOptions{Provider: provider})
-					Expect(Validate(ctx, test.Provisioner(test.ProvisionerOptions{Provider: provider}))).ToNot(Succeed())
-				})
+			It("should fail on invalid formatted percentage value in evictionSoft", func() {
+				provisioner.Spec.KubeletConfiguration = &KubeletConfiguration{
+					EvictionSoft: map[string]string{
+						"memory.available": "5%3",
+					},
+					EvictionSoftGracePeriod: map[string]metav1.Duration{
+						"memory.available": {Duration: time.Minute},
+					},
+				}
+				Expect(provisioner.Validate(ctx)).ToNot(Succeed())
 			})
-			Context("HTTPPutResponseHopLimit", func() {
-				It("should validate inside accepted range", func() {
-					provider, err := v1alpha1.DeserializeProvider(provisioner.Spec.Provider.Raw)
-					Expect(err).ToNot(HaveOccurred())
-					provider.MetadataOptions = &v1alpha1.MetadataOptions{
-						HTTPPutResponseHopLimit: aws.Int64(int64(randomdata.Number(1, 65))),
+			It("should fail on invalid percentage value (too large) in evictionSoft", func() {
+				provisioner.Spec.KubeletConfiguration = &KubeletConfiguration{
+					EvictionSoft: map[string]string{
+						"memory.available": "110%",
+					},
+					EvictionSoftGracePeriod: map[string]metav1.Duration{
+						"memory.available": {Duration: time.Minute},
+					},
+				}
+				Expect(provisioner.Validate(ctx)).ToNot(Succeed())
+			})
+			It("should fail on invalid quantity value in evictionSoft", func() {
+				provisioner.Spec.KubeletConfiguration = &KubeletConfiguration{
+					EvictionSoft: map[string]string{
+						"memory.available": "110GB",
+					},
+					EvictionSoftGracePeriod: map[string]metav1.Duration{
+						"memory.available": {Duration: time.Minute},
+					},
+				}
+				Expect(provisioner.Validate(ctx)).ToNot(Succeed())
+			})
+			It("should fail when eviction soft doesn't have matching grace period", func() {
+				provisioner.Spec.KubeletConfiguration = &KubeletConfiguration{
+					EvictionSoft: map[string]string{
+						"memory.available": "200Mi",
+					},
+				}
+				Expect(provisioner.Validate(ctx)).ToNot(Succeed())
+			})
+		})
+		Context("GCThresholdPercent", func() {
+			Context("ImageGCHighThresholdPercent", func() {
+				It("should succeed on a imageGCHighThresholdPercent", func() {
+					provisioner.Spec.KubeletConfiguration = &KubeletConfiguration{
+						ImageGCHighThresholdPercent: ptr.Int32(10),
 					}
-					provisioner = test.Provisioner(test.ProvisionerOptions{Provider: provider})
 					Expect(provisioner.Validate(ctx)).To(Succeed())
 				})
-				It("should not validate outside accepted range", func() {
-					provider, err := v1alpha1.DeserializeProvider(provisioner.Spec.Provider.Raw)
-					Expect(err).ToNot(HaveOccurred())
-					provider.MetadataOptions = &v1alpha1.MetadataOptions{}
-					// We expect to be able to invalidate any hop limit between
-					// [math.MinInt64, 1). But, to avoid a panic here, we can't
-					// exceed math.MaxInt for the difference between bounds of
-					// the random number range. So we divide the range
-					// approximately in half and test on both halves.
-					provider.MetadataOptions.HTTPPutResponseHopLimit = aws.Int64(int64(randomdata.Number(math.MinInt64, math.MinInt64/2)))
-					provisioner = test.Provisioner(test.ProvisionerOptions{Provider: provider})
-					Expect(Validate(ctx, test.Provisioner(test.ProvisionerOptions{Provider: provider}))).ToNot(Succeed())
-					provider.MetadataOptions.HTTPPutResponseHopLimit = aws.Int64(int64(randomdata.Number(math.MinInt64/2, 1)))
-					provisioner = test.Provisioner(test.ProvisionerOptions{Provider: provider})
-					Expect(Validate(ctx, test.Provisioner(test.ProvisionerOptions{Provider: provider}))).ToNot(Succeed())
-
-					provider.MetadataOptions.HTTPPutResponseHopLimit = aws.Int64(int64(randomdata.Number(65, math.MaxInt64)))
-					provisioner = test.Provisioner(test.ProvisionerOptions{Provider: provider})
-					Expect(Validate(ctx, test.Provisioner(test.ProvisionerOptions{Provider: provider}))).ToNot(Succeed())
+				It("should fail when imageGCHighThresholdPercent is less than imageGCLowThresholdPercent", func() {
+					provisioner.Spec.KubeletConfiguration = &KubeletConfiguration{
+						ImageGCHighThresholdPercent: ptr.Int32(50),
+						ImageGCLowThresholdPercent:  ptr.Int32(60),
+					}
+					Expect(provisioner.Validate(ctx)).ToNot(Succeed())
 				})
 			})
-			Context("HTTPTokens", func() {
-				It("should allow enum values", func() {
-					provider, err := v1alpha1.DeserializeProvider(provisioner.Spec.Provider.Raw)
-					Expect(err).ToNot(HaveOccurred())
-					for _, value := range ec2.LaunchTemplateHttpTokensState_Values() {
-						provider.MetadataOptions = &v1alpha1.MetadataOptions{
-							HTTPTokens: aws.String(value),
-						}
-						provisioner = test.Provisioner(test.ProvisionerOptions{Provider: provider})
-						Expect(provisioner.Validate(ctx)).To(Succeed())
+			Context("ImageGCLowThresholdPercent", func() {
+				It("should succeed on a imageGCLowThresholdPercent", func() {
+					provisioner.Spec.KubeletConfiguration = &KubeletConfiguration{
+						ImageGCLowThresholdPercent: ptr.Int32(10),
 					}
+					Expect(provisioner.Validate(ctx)).To(Succeed())
 				})
-				It("should not allow non-enum values", func() {
-					provider, err := v1alpha1.DeserializeProvider(provisioner.Spec.Provider.Raw)
-					Expect(err).ToNot(HaveOccurred())
-					provider.MetadataOptions = &v1alpha1.MetadataOptions{
-						HTTPTokens: aws.String(randomdata.SillyName()),
+				It("should fail when imageGCLowThresholdPercent is greather than imageGCHighThresheldPercent", func() {
+					provisioner.Spec.KubeletConfiguration = &KubeletConfiguration{
+						ImageGCHighThresholdPercent: ptr.Int32(50),
+						ImageGCLowThresholdPercent:  ptr.Int32(60),
 					}
-					Expect(Validate(ctx, test.Provisioner(test.ProvisionerOptions{Provider: provider}))).ToNot(Succeed())
+					Expect(provisioner.Validate(ctx)).ToNot(Succeed())
 				})
 			})
-			Context("BlockDeviceMappings", func() {
-				It("should not allow with a custom launch template", func() {
-					provider, err := v1alpha1.DeserializeProvider(provisioner.Spec.Provider.Raw)
-					Expect(err).ToNot(HaveOccurred())
-					provider.LaunchTemplateName = aws.String("my-lt")
-					provider.BlockDeviceMappings = []*v1alpha1.BlockDeviceMapping{{
-						DeviceName: aws.String("/dev/xvda"),
-						EBS: &v1alpha1.BlockDevice{
-							VolumeSize: resource.NewScaledQuantity(1, resource.Giga),
-						},
-					}}
-					Expect(Validate(ctx, test.Provisioner(test.ProvisionerOptions{Provider: provider}))).ToNot(Succeed())
-				})
-				It("should validate minimal device mapping", func() {
-					provider, err := v1alpha1.DeserializeProvider(provisioner.Spec.Provider.Raw)
-					Expect(err).ToNot(HaveOccurred())
-					provider.BlockDeviceMappings = []*v1alpha1.BlockDeviceMapping{{
-						DeviceName: aws.String("/dev/xvda"),
-						EBS: &v1alpha1.BlockDevice{
-							VolumeSize: resource.NewScaledQuantity(1, resource.Giga),
-						},
-					}}
-					Expect(Validate(ctx, test.Provisioner(test.ProvisionerOptions{Provider: provider}))).ToNot(Succeed())
-				})
-				It("should validate ebs device mapping with snapshotID only", func() {
-					provider, err := v1alpha1.DeserializeProvider(provisioner.Spec.Provider.Raw)
-					Expect(err).ToNot(HaveOccurred())
-					provider.BlockDeviceMappings = []*v1alpha1.BlockDeviceMapping{{
-						DeviceName: aws.String("/dev/xvda"),
-						EBS: &v1alpha1.BlockDevice{
-							SnapshotID: aws.String("snap-0123456789"),
-						},
-					}}
-					Expect(Validate(ctx, test.Provisioner(test.ProvisionerOptions{Provider: provider}))).ToNot(Succeed())
-				})
-				It("should not allow volume size below minimum", func() {
-					provider, err := v1alpha1.DeserializeProvider(provisioner.Spec.Provider.Raw)
-					Expect(err).ToNot(HaveOccurred())
-					provider.BlockDeviceMappings = []*v1alpha1.BlockDeviceMapping{{
-						DeviceName: aws.String("/dev/xvda"),
-						EBS: &v1alpha1.BlockDevice{
-							VolumeSize: resource.NewScaledQuantity(100, resource.Mega),
-						},
-					}}
-					Expect(Validate(ctx, test.Provisioner(test.ProvisionerOptions{Provider: provider}))).ToNot(Succeed())
-				})
-				It("should not allow volume size above max", func() {
-					provider, err := v1alpha1.DeserializeProvider(provisioner.Spec.Provider.Raw)
-					Expect(err).ToNot(HaveOccurred())
-					provider.BlockDeviceMappings = []*v1alpha1.BlockDeviceMapping{{
-						DeviceName: aws.String("/dev/xvda"),
-						EBS: &v1alpha1.BlockDevice{
-							VolumeSize: resource.NewScaledQuantity(65, resource.Tera),
-						},
-					}}
-					Expect(Validate(ctx, test.Provisioner(test.ProvisionerOptions{Provider: provider}))).ToNot(Succeed())
-				})
-				It("should not allow nil device name", func() {
-					provider, err := v1alpha1.DeserializeProvider(provisioner.Spec.Provider.Raw)
-					Expect(err).ToNot(HaveOccurred())
-					provider.BlockDeviceMappings = []*v1alpha1.BlockDeviceMapping{{
-						EBS: &v1alpha1.BlockDevice{
-							VolumeSize: resource.NewScaledQuantity(65, resource.Tera),
-						},
-					}}
-					Expect(Validate(ctx, test.Provisioner(test.ProvisionerOptions{Provider: provider}))).ToNot(Succeed())
-				})
-				It("should not allow nil volume size", func() {
-					provider, err := v1alpha1.DeserializeProvider(provisioner.Spec.Provider.Raw)
-					Expect(err).ToNot(HaveOccurred())
-					provider.BlockDeviceMappings = []*v1alpha1.BlockDeviceMapping{{
-						DeviceName: aws.String("/dev/xvda"),
-						EBS:        &v1alpha1.BlockDevice{},
-					}}
-					Expect(Validate(ctx, test.Provisioner(test.ProvisionerOptions{Provider: provider}))).ToNot(Succeed())
-				})
-				It("should not allow empty ebs block", func() {
-					provider, err := v1alpha1.DeserializeProvider(provisioner.Spec.Provider.Raw)
-					Expect(err).ToNot(HaveOccurred())
-					provider.BlockDeviceMappings = []*v1alpha1.BlockDeviceMapping{{
-						DeviceName: aws.String("/dev/xvda"),
-					}}
-					Expect(Validate(ctx, test.Provisioner(test.ProvisionerOptions{Provider: provider}))).ToNot(Succeed())
-				})
+		})
+		Context("Eviction Soft Grace Period", func() {
+			It("should succeed on evictionSoftGracePeriod with valid keys", func() {
+				provisioner.Spec.KubeletConfiguration = &KubeletConfiguration{
+					EvictionSoft: map[string]string{
+						"memory.available":   "5%",
+						"nodefs.available":   "10%",
+						"nodefs.inodesFree":  "15%",
+						"imagefs.available":  "5%",
+						"imagefs.inodesFree": "5%",
+						"pid.available":      "5%",
+					},
+					EvictionSoftGracePeriod: map[string]metav1.Duration{
+						"memory.available":   {Duration: time.Minute},
+						"nodefs.available":   {Duration: time.Second * 90},
+						"nodefs.inodesFree":  {Duration: time.Minute * 5},
+						"imagefs.available":  {Duration: time.Hour},
+						"imagefs.inodesFree": {Duration: time.Hour * 24},
+						"pid.available":      {Duration: time.Minute},
+					},
+				}
+				Expect(provisioner.Validate(ctx)).To(Succeed())
+			})
+			It("should fail on evictionSoftGracePeriod with invalid keys", func() {
+				provisioner.Spec.KubeletConfiguration = &KubeletConfiguration{
+					EvictionSoftGracePeriod: map[string]metav1.Duration{
+						"memory": {Duration: time.Minute},
+					},
+				}
+				Expect(provisioner.Validate(ctx)).ToNot(Succeed())
+			})
+			It("should fail when eviction soft grace period doesn't have matching threshold", func() {
+				provisioner.Spec.KubeletConfiguration = &KubeletConfiguration{
+					EvictionSoftGracePeriod: map[string]metav1.Duration{
+						"memory.available": {Duration: time.Minute},
+					},
+				}
+				Expect(provisioner.Validate(ctx)).ToNot(Succeed())
 			})
 		})
 	})
 })
 
-func SetDefaults(ctx context.Context, provisioner *v1alpha5.Provisioner) {
-	prov := apisv1alpha5.Provisioner(*provisioner)
-	prov.SetDefaults(ctx)
-	*provisioner = v1alpha5.Provisioner(prov)
-}
+var _ = Describe("Limits", func() {
+	var provisioner *Provisioner
 
-func Validate(ctx context.Context, provisioner *v1alpha5.Provisioner) error {
-	return multierr.Combine(
-		lo.ToPtr(apisv1alpha5.Provisioner(*provisioner)).Validate(ctx),
-		provisioner.Validate(ctx),
+	BeforeEach(func() {
+		provisioner = &Provisioner{
+			ObjectMeta: metav1.ObjectMeta{Name: strings.ToLower(randomdata.SillyName())},
+			Spec: ProvisionerSpec{
+				Limits: &Limits{
+					Resources: v1.ResourceList{
+						"cpu": resource.MustParse("16"),
+					},
+				},
+			},
+		}
+	})
+
+	It("should work when usage is lower than limit", func() {
+		provisioner.Status.Resources = v1.ResourceList{"cpu": resource.MustParse("15")}
+		Expect(provisioner.Spec.Limits.ExceededBy(provisioner.Status.Resources)).To(Succeed())
+	})
+	It("should work when usage is equal to limit", func() {
+		provisioner.Status.Resources = v1.ResourceList{"cpu": resource.MustParse("16")}
+		Expect(provisioner.Spec.Limits.ExceededBy(provisioner.Status.Resources)).To(Succeed())
+	})
+	It("should fail when usage is higher than limit", func() {
+		provisioner.Status.Resources = v1.ResourceList{"cpu": resource.MustParse("17")}
+		Expect(provisioner.Spec.Limits.ExceededBy(provisioner.Status.Resources)).To(MatchError("cpu resource usage of 17 exceeds limit of 16"))
+	})
+})
+
+var _ = Describe("Provisioner Annotation", func() {
+	var testProvisionerOptions test.ProvisionerOptions
+	var provisioner *Provisioner
+
+	const baseProvisionerExpectedHash = "775825888864018614"
+
+	BeforeEach(func() {
+		taints := []v1.Taint{
+			{
+				Key:    "keyValue1",
+				Effect: v1.TaintEffectNoExecute,
+			},
+			{
+				Key:    "keyValue2",
+				Effect: v1.TaintEffectNoExecute,
+			},
+		}
+		testProvisionerOptions = test.ProvisionerOptions{
+			Taints:        taints,
+			StartupTaints: taints,
+			Labels: map[string]string{
+				"keyLabel":  "valueLabel",
+				"keyLabel2": "valueLabel2",
+			},
+			Kubelet: &KubeletConfiguration{
+				MaxPods: ptr.Int32(10),
+			},
+			Annotations: map[string]string{
+				"keyAnnotation":  "valueAnnotation",
+				"keyAnnotation2": "valueAnnotation2",
+			},
+		}
+		provisioner = test.Provisioner(testProvisionerOptions)
+	})
+	DescribeTable(
+		"Static Hash Values",
+		func(expectedHash string, opts ...test.ProvisionerOptions) {
+			overrides := append([]test.ProvisionerOptions{testProvisionerOptions}, opts...)
+			p := test.Provisioner(overrides...)
+			Expect(p.Hash()).To(Equal(expectedHash))
+		},
+		// Base provisioner
+		Entry("should match with the base provisioner", baseProvisionerExpectedHash),
+
+		// Modified static fields - expect change from base provisioner
+		Entry(
+			"should match with modified annotations",
+			"8291486979066679783",
+			test.ProvisionerOptions{Annotations: map[string]string{"keyAnnotationTest": "valueAnnotationTest"}},
+		),
+		Entry(
+			"should match with modified labels",
+			"13084558173553732887",
+			test.ProvisionerOptions{Labels: map[string]string{"keyLabelTest": "valueLabelTest"}},
+		),
+		Entry(
+			"should match with modified taints",
+			"2448241124432930761",
+			test.ProvisionerOptions{Taints: []v1.Taint{{Key: "keytest2Taint", Effect: v1.TaintEffectNoExecute}}},
+		),
+		Entry(
+			"should match with modified startup taints",
+			"6798849987795493190",
+			test.ProvisionerOptions{StartupTaints: []v1.Taint{{Key: "keytest2StartupTaint", Effect: v1.TaintEffectNoExecute}}},
+		),
+		Entry(
+			"should match with modified kubelet config",
+			"12466819533084384505",
+			test.ProvisionerOptions{Kubelet: &KubeletConfiguration{MaxPods: ptr.Int32(30)}},
+		),
+
+		// Modified behavior fields - shouldn't change from base provisioner
+		Entry(
+			"should match with modified limits",
+			baseProvisionerExpectedHash,
+			test.ProvisionerOptions{Limits: v1.ResourceList{"cpu": resource.MustParse("4")}},
+		),
+		Entry(
+			"should match with modified provider ref",
+			baseProvisionerExpectedHash,
+			test.ProvisionerOptions{ProviderRef: &MachineTemplateRef{Name: "foobar"}},
+		),
+		Entry(
+			"should match with modified requirements",
+			baseProvisionerExpectedHash,
+			test.ProvisionerOptions{Requirements: []v1.NodeSelectorRequirement{
+				{Key: v1.LabelTopologyZone, Operator: v1.NodeSelectorOpIn, Values: []string{"test"}},
+				{Key: v1.LabelTopologyZone, Operator: v1.NodeSelectorOpGt, Values: []string{"1"}},
+				{Key: v1.LabelTopologyZone, Operator: v1.NodeSelectorOpLt, Values: []string{"1"}},
+			}},
+		),
+		Entry(
+			"should match with modified TTLSecondsUntilExpired",
+			baseProvisionerExpectedHash,
+			test.ProvisionerOptions{TTLSecondsUntilExpired: lo.ToPtr(int64(30))},
+		),
+		Entry(
+			"should match with modified TTLSecondsAfterEmpty",
+			baseProvisionerExpectedHash,
+			test.ProvisionerOptions{TTLSecondsAfterEmpty: lo.ToPtr(int64(50))},
+		),
+		Entry(
+			"should match with modified weight",
+			baseProvisionerExpectedHash,
+			test.ProvisionerOptions{Weight: lo.ToPtr(int32(80))},
+		),
+		Entry(
+			"should match with modified consolidation flag",
+			baseProvisionerExpectedHash,
+			test.ProvisionerOptions{Consolidation: &Consolidation{lo.ToPtr(true)}},
+		),
 	)
-}
+	It("should change hash when static fields are updated", func() {
+		expectedHash := provisioner.Hash()
+
+		// Change one static field for 5 provisioners
+		provisionerFieldToChange := []*Provisioner{
+			test.Provisioner(testProvisionerOptions, test.ProvisionerOptions{Annotations: map[string]string{"keyAnnotationTest": "valueAnnotationTest"}}),
+			test.Provisioner(testProvisionerOptions, test.ProvisionerOptions{Labels: map[string]string{"keyLabelTest": "valueLabelTest"}}),
+			test.Provisioner(testProvisionerOptions, test.ProvisionerOptions{Taints: []v1.Taint{{Key: "keytest2Taint", Effect: v1.TaintEffectNoExecute}}}),
+			test.Provisioner(testProvisionerOptions, test.ProvisionerOptions{StartupTaints: []v1.Taint{{Key: "keytest2StartupTaint", Effect: v1.TaintEffectNoExecute}}}),
+			test.Provisioner(testProvisionerOptions, test.ProvisionerOptions{Kubelet: &KubeletConfiguration{MaxPods: ptr.Int32(30)}}),
+		}
+
+		for _, updatedProvisioner := range provisionerFieldToChange {
+			actualHash := updatedProvisioner.Hash()
+			Expect(actualHash).ToNot(Equal(fmt.Sprint(expectedHash)))
+		}
+	})
+	It("should not change hash when behavior fields are updated", func() {
+		actualHash := provisioner.Hash()
+
+		expectedHash, err := hashstructure.Hash(provisioner.Spec, hashstructure.FormatV2, &hashstructure.HashOptions{
+			SlicesAsSets:    true,
+			IgnoreZeroValue: true,
+			ZeroNil:         true,
+		})
+		Expect(err).ToNot(HaveOccurred())
+		Expect(actualHash).To(Equal(fmt.Sprint(expectedHash)))
+
+		// Update a behavior field
+		provisioner.Spec.Limits = &Limits{Resources: v1.ResourceList{"cpu": resource.MustParse("16")}}
+		provisioner.Spec.Consolidation = &Consolidation{Enabled: lo.ToPtr(true)}
+		provisioner.Spec.TTLSecondsAfterEmpty = lo.ToPtr(int64(30))
+		provisioner.Spec.TTLSecondsUntilExpired = lo.ToPtr(int64(50))
+		provisioner.Spec.Requirements = []v1.NodeSelectorRequirement{
+			{Key: v1.LabelTopologyZone, Operator: v1.NodeSelectorOpIn, Values: []string{"test"}},
+			{Key: v1.LabelTopologyZone, Operator: v1.NodeSelectorOpGt, Values: []string{"1"}},
+			{Key: v1.LabelTopologyZone, Operator: v1.NodeSelectorOpLt, Values: []string{"1"}},
+		}
+		provisioner.Spec.Weight = lo.ToPtr(int32(80))
+
+		actualHash = provisioner.Hash()
+		Expect(err).ToNot(HaveOccurred())
+		Expect(actualHash).To(Equal(fmt.Sprint(expectedHash)))
+	})
+	It("should expect two provisioner with the same spec to have the same provisioner hash", func() {
+		provisionerTwo := &Provisioner{
+			ObjectMeta: metav1.ObjectMeta{Name: strings.ToLower(randomdata.SillyName())},
+		}
+		provisionerTwo.Spec = provisioner.Spec
+
+		Expect(provisioner.Hash()).To(Equal(provisionerTwo.Hash()))
+	})
+	It("should expect hashes that are reordered to not produce a new hash", func() {
+		expectedHash := provisioner.Hash()
+		updatedTaints := []v1.Taint{
+			{
+				Key:    "keyValue2",
+				Effect: v1.TaintEffectNoExecute,
+			},
+			{
+				Key:    "keyValue1",
+				Effect: v1.TaintEffectNoExecute,
+			},
+		}
+
+		provisionerFieldToChange := []*Provisioner{
+			test.Provisioner(testProvisionerOptions, test.ProvisionerOptions{Annotations: map[string]string{"keyAnnotation2": "valueAnnotation2", "keyAnnotation": "valueAnnotation"}}),
+			test.Provisioner(testProvisionerOptions, test.ProvisionerOptions{Taints: updatedTaints}),
+			test.Provisioner(testProvisionerOptions, test.ProvisionerOptions{StartupTaints: updatedTaints}),
+		}
+
+		for _, updatedProvisioner := range provisionerFieldToChange {
+			actualHash := updatedProvisioner.Hash()
+			Expect(actualHash).To(Equal(fmt.Sprint(expectedHash)))
+		}
+	})
+})

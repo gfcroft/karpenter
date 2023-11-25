@@ -24,12 +24,12 @@ import (
 	v1 "k8s.io/api/core/v1"
 	. "knative.dev/pkg/logging/testing"
 
-	"github.com/aws/karpenter/pkg/apis/settings"
+	"github.com/aws/karpenter-core/pkg/apis/settings"
 )
 
 var ctx context.Context
 
-func TestAPIs(t *testing.T) {
+func TestSettings(t *testing.T) {
 	ctx = TestContextWithLogger(t)
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "Settings")
@@ -38,180 +38,88 @@ func TestAPIs(t *testing.T) {
 var _ = Describe("Validation", func() {
 	It("should succeed to set defaults", func() {
 		cm := &v1.ConfigMap{
-			Data: map[string]string{
-				"aws.clusterEndpoint": "https://00000000000000000000000.gr7.us-west-2.eks.amazonaws.com",
-				"aws.clusterName":     "my-cluster",
-			},
+			Data: map[string]string{},
 		}
 		ctx, err := (&settings.Settings{}).Inject(ctx, cm)
 		Expect(err).ToNot(HaveOccurred())
 		s := settings.FromContext(ctx)
-		Expect(s.AssumeRoleARN).To(Equal(""))
-		Expect(s.AssumeRoleDuration).To(Equal(time.Duration(15) * time.Minute))
-		Expect(s.ClusterCABundle).To(Equal(""))
-		Expect(s.DefaultInstanceProfile).To(Equal(""))
-		Expect(s.EnablePodENI).To(BeFalse())
-		Expect(s.EnableENILimitedPodDensity).To(BeTrue())
-		Expect(s.IsolatedVPC).To(BeFalse())
-		Expect(s.VMMemoryOverheadPercent).To(Equal(0.075))
-		Expect(len(s.Tags)).To(BeZero())
-		Expect(s.ReservedENIs).To(Equal(0))
+		Expect(s.BatchMaxDuration).To(Equal(time.Second * 10))
+		Expect(s.BatchIdleDuration).To(Equal(time.Second))
+		Expect(s.DriftEnabled).To(BeFalse())
 	})
 	It("should succeed to set custom values", func() {
 		cm := &v1.ConfigMap{
 			Data: map[string]string{
-				"aws.assumeRoleARN":              "arn:aws:iam::111222333444:role/testrole",
-				"aws.assumeRoleDuration":         "27m",
-				"aws.clusterCABundle":            "ca-bundle",
-				"aws.clusterEndpoint":            "https://00000000000000000000000.gr7.us-west-2.eks.amazonaws.com",
-				"aws.clusterName":                "my-cluster",
-				"aws.defaultInstanceProfile":     "karpenter",
-				"aws.enablePodENI":               "true",
-				"aws.enableENILimitedPodDensity": "false",
-				"aws.isolatedVPC":                "true",
-				"aws.vmMemoryOverheadPercent":    "0.1",
-				"aws.tags":                       `{"tag1": "value1", "tag2": "value2", "example.com/tag": "my-value"}`,
-				"aws.reservedENIs":               "1",
+				"batchMaxDuration":          "30s",
+				"batchIdleDuration":         "5s",
+				"featureGates.driftEnabled": "true",
 			},
 		}
 		ctx, err := (&settings.Settings{}).Inject(ctx, cm)
 		Expect(err).ToNot(HaveOccurred())
 		s := settings.FromContext(ctx)
-		Expect(s.AssumeRoleARN).To(Equal("arn:aws:iam::111222333444:role/testrole"))
-		Expect(s.AssumeRoleDuration).To(Equal(time.Duration(27) * time.Minute))
-		Expect(s.ClusterCABundle).To(Equal("ca-bundle"))
-		Expect(s.DefaultInstanceProfile).To(Equal("karpenter"))
-		Expect(s.EnablePodENI).To(BeTrue())
-		Expect(s.EnableENILimitedPodDensity).To(BeFalse())
-		Expect(s.IsolatedVPC).To(BeTrue())
-		Expect(s.VMMemoryOverheadPercent).To(Equal(0.1))
-		Expect(len(s.Tags)).To(Equal(3))
-		Expect(s.Tags).To(HaveKeyWithValue("tag1", "value1"))
-		Expect(s.Tags).To(HaveKeyWithValue("tag2", "value2"))
-		Expect(s.Tags).To(HaveKeyWithValue("example.com/tag", "my-value"))
-		Expect(s.ReservedENIs).To(Equal(1))
+		Expect(s.BatchMaxDuration).To(Equal(time.Second * 30))
+		Expect(s.BatchIdleDuration).To(Equal(time.Second * 5))
+		Expect(s.DriftEnabled).To(BeTrue())
 	})
-	It("should succeed when setting values that no longer exist (backwards compatibility)", func() {
+	It("should fail validation when batchMaxDuration is negative", func() {
 		cm := &v1.ConfigMap{
 			Data: map[string]string{
-				"aws.clusterEndpoint":            "https://00000000000000000000000.gr7.us-west-2.eks.amazonaws.com",
-				"aws.clusterName":                "my-cluster",
-				"aws.defaultInstanceProfile":     "karpenter",
-				"aws.enablePodENI":               "true",
-				"aws.enableENILimitedPodDensity": "false",
-				"aws.isolatedVPC":                "true",
-				"aws.vmMemoryOverheadPercent":    "0.1",
-				"aws.tags":                       `{"tag1": "value1", "tag2": "value2", "example.com/tag": "my-value"}`,
-				"aws.reservedENIs":               "1",
-				"aws.nodeNameConvention":         "resource-name",
-			},
-		}
-		ctx, err := (&settings.Settings{}).Inject(ctx, cm)
-		Expect(err).ToNot(HaveOccurred())
-		s := settings.FromContext(ctx)
-		Expect(s.DefaultInstanceProfile).To(Equal("karpenter"))
-		Expect(s.EnablePodENI).To(BeTrue())
-		Expect(s.EnableENILimitedPodDensity).To(BeFalse())
-		Expect(s.IsolatedVPC).To(BeTrue())
-		Expect(s.VMMemoryOverheadPercent).To(Equal(0.1))
-		Expect(len(s.Tags)).To(Equal(3))
-		Expect(s.Tags).To(HaveKeyWithValue("tag1", "value1"))
-		Expect(s.Tags).To(HaveKeyWithValue("tag2", "value2"))
-		Expect(s.Tags).To(HaveKeyWithValue("example.com/tag", "my-value"))
-		Expect(s.ReservedENIs).To(Equal(1))
-	})
-	It("should succeed validation when tags contain parts of restricted domains", func() {
-		cm := &v1.ConfigMap{
-			Data: map[string]string{
-				"aws.clusterEndpoint": "https://00000000000000000000000.gr7.us-west-2.eks.amazonaws.com",
-				"aws.clusterName":     "my-cluster",
-				"aws.tags":            `{"karpenter.sh/custom-key": "value1", "karpenter.sh/managed": "true", "kubernetes.io/role/key": "value2", "kubernetes.io/cluster/other-tag/hello": "value3"}`,
-			},
-		}
-		ctx, err := (&settings.Settings{}).Inject(ctx, cm)
-		Expect(err).ToNot(HaveOccurred())
-		s := settings.FromContext(ctx)
-		Expect(s.Tags).To(HaveKeyWithValue("karpenter.sh/custom-key", "value1"))
-		Expect(s.Tags).To(HaveKeyWithValue("karpenter.sh/managed", "true"))
-		Expect(s.Tags).To(HaveKeyWithValue("kubernetes.io/role/key", "value2"))
-		Expect(s.Tags).To(HaveKeyWithValue("kubernetes.io/cluster/other-tag/hello", "value3"))
-	})
-	It("should fail validation with panic when clusterName not included", func() {
-		cm := &v1.ConfigMap{
-			Data: map[string]string{
-				"aws.clusterEndpoint": "https://00000000000000000000000.gr7.us-west-2.eks.amazonaws.com",
+				"batchMaxDuration": "-10s",
 			},
 		}
 		_, err := (&settings.Settings{}).Inject(ctx, cm)
 		Expect(err).To(HaveOccurred())
 	})
-	It("should fail validation when clusterEndpoint is invalid (not absolute)", func() {
+	It("should fail validation when batchMaxDuration is less then 1s", func() {
 		cm := &v1.ConfigMap{
 			Data: map[string]string{
-				"aws.clusterName":     "my-name",
-				"aws.clusterEndpoint": "00000000000000000000000.gr7.us-west-2.eks.amazonaws.com",
+				"batchMaxDuration": "800ms",
 			},
 		}
 		_, err := (&settings.Settings{}).Inject(ctx, cm)
 		Expect(err).To(HaveOccurred())
 	})
-	It("should fail validation with panic when vmMemoryOverheadPercent is negative", func() {
+	It("should fail validation when batchMaxDuration is set to empty", func() {
 		cm := &v1.ConfigMap{
 			Data: map[string]string{
-				"aws.clusterEndpoint":         "https://00000000000000000000000.gr7.us-west-2.eks.amazonaws.com",
-				"aws.clusterName":             "my-cluster",
-				"aws.vmMemoryOverheadPercent": "-0.01",
+				"batchMaxDuration": "",
 			},
 		}
 		_, err := (&settings.Settings{}).Inject(ctx, cm)
 		Expect(err).To(HaveOccurred())
 	})
-	It("should fail validation when tags have keys that are in the restricted set of keys", func() {
+	It("should fail validation when batchIdleDuration is negative", func() {
 		cm := &v1.ConfigMap{
 			Data: map[string]string{
-				"aws.clusterEndpoint": "https://00000000000000000000000.gr7.us-west-2.eks.amazonaws.com",
-				"aws.clusterName":     "my-cluster",
-				"aws.tags":            `{"karpenter.sh/provisioner-name": "value1"}`,
-			},
-		}
-		_, err := (&settings.Settings{}).Inject(ctx, cm)
-		Expect(err).To(HaveOccurred())
-
-		cm = &v1.ConfigMap{
-			Data: map[string]string{
-				"aws.clusterEndpoint": "https://00000000000000000000000.gr7.us-west-2.eks.amazonaws.com",
-				"aws.clusterName":     "my-cluster",
-				"aws.tags":            `{"value1", "karpenter.sh/managed-by": "value"}`,
-			},
-		}
-		_, err = (&settings.Settings{}).Inject(ctx, cm)
-		Expect(err).To(HaveOccurred())
-
-		cm = &v1.ConfigMap{
-			Data: map[string]string{
-				"aws.clusterEndpoint": "https://00000000000000000000000.gr7.us-west-2.eks.amazonaws.com",
-				"aws.clusterName":     "my-cluster",
-				"aws.tags":            `{"kubernetes.io/cluster/my-cluster": "value2"}`,
-			},
-		}
-		_, err = (&settings.Settings{}).Inject(ctx, cm)
-		Expect(err).To(HaveOccurred())
-	})
-	It("should fail validation with reservedENIs is negative", func() {
-		cm := &v1.ConfigMap{
-			Data: map[string]string{
-				"aws.reservedENIs": "-1",
-				"aws.clusterName":  "my-cluster",
+				"batchIdleDuration": "-1s",
 			},
 		}
 		_, err := (&settings.Settings{}).Inject(ctx, cm)
 		Expect(err).To(HaveOccurred())
 	})
-	It("should fail validation with assumeDurationRole is less then 15m", func() {
+	It("should fail validation when batchIdleDuration is less then 1s", func() {
 		cm := &v1.ConfigMap{
 			Data: map[string]string{
-				"aws.assumeRoleDuration": "2m",
-				"aws.clusterName":        "my-cluster",
+				"batchIdleDuration": "800ms",
+			},
+		}
+		_, err := (&settings.Settings{}).Inject(ctx, cm)
+		Expect(err).To(HaveOccurred())
+	})
+	It("should fail validation when batchIdleDuration is set to empty", func() {
+		cm := &v1.ConfigMap{
+			Data: map[string]string{
+				"batchMaxDuration": "",
+			},
+		}
+		_, err := (&settings.Settings{}).Inject(ctx, cm)
+		Expect(err).To(HaveOccurred())
+	})
+	It("should fail validation when driftEnabled is not a valid boolean value", func() {
+		cm := &v1.ConfigMap{
+			Data: map[string]string{
+				"featureGates.driftEnabled": "foobar",
 			},
 		}
 		_, err := (&settings.Settings{}).Inject(ctx, cm)

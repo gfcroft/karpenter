@@ -15,52 +15,66 @@ limitations under the License.
 package controllers
 
 import (
-	"context"
-
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/sqs"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/utils/clock"
-	"knative.dev/pkg/logging"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	"github.com/aws/karpenter-core/pkg/cloudprovider"
+	"github.com/aws/karpenter-core/pkg/controllers/disruption"
+	"github.com/aws/karpenter-core/pkg/controllers/disruption/orchestration"
+	"github.com/aws/karpenter-core/pkg/controllers/leasegarbagecollection"
+	metricsnode "github.com/aws/karpenter-core/pkg/controllers/metrics/node"
+	metricsnodepool "github.com/aws/karpenter-core/pkg/controllers/metrics/nodepool"
+	metricspod "github.com/aws/karpenter-core/pkg/controllers/metrics/pod"
+	"github.com/aws/karpenter-core/pkg/controllers/node/termination"
+	"github.com/aws/karpenter-core/pkg/controllers/node/termination/terminator"
+	nodeclaimconsistency "github.com/aws/karpenter-core/pkg/controllers/nodeclaim/consistency"
+	nodeclaimdisruption "github.com/aws/karpenter-core/pkg/controllers/nodeclaim/disruption"
+	nodeclaimgarbagecollection "github.com/aws/karpenter-core/pkg/controllers/nodeclaim/garbagecollection"
+	nodeclaimlifecycle "github.com/aws/karpenter-core/pkg/controllers/nodeclaim/lifecycle"
+	nodeclaimtermination "github.com/aws/karpenter-core/pkg/controllers/nodeclaim/termination"
+	nodepoolcounter "github.com/aws/karpenter-core/pkg/controllers/nodepool/counter"
+	nodepoolhash "github.com/aws/karpenter-core/pkg/controllers/nodepool/hash"
+	"github.com/aws/karpenter-core/pkg/controllers/provisioning"
+	"github.com/aws/karpenter-core/pkg/controllers/state"
+	"github.com/aws/karpenter-core/pkg/controllers/state/informer"
 	"github.com/aws/karpenter-core/pkg/events"
-	"github.com/aws/karpenter/pkg/apis/settings"
-	"github.com/aws/karpenter/pkg/cache"
-	"github.com/aws/karpenter/pkg/cloudprovider"
-	"github.com/aws/karpenter/pkg/controllers/interruption"
-	nodeclaimgarbagecollection "github.com/aws/karpenter/pkg/controllers/nodeclaim/garbagecollection"
-	nodeclaimlink "github.com/aws/karpenter/pkg/controllers/nodeclaim/link"
-	"github.com/aws/karpenter/pkg/controllers/nodeclass"
-	"github.com/aws/karpenter/pkg/providers/amifamily"
-	"github.com/aws/karpenter/pkg/providers/instanceprofile"
-	"github.com/aws/karpenter/pkg/providers/pricing"
-	"github.com/aws/karpenter/pkg/providers/securitygroup"
-	"github.com/aws/karpenter/pkg/providers/subnet"
-	"github.com/aws/karpenter/pkg/utils/project"
-
 	"github.com/aws/karpenter-core/pkg/operator/controller"
 )
 
-func NewControllers(ctx context.Context, sess *session.Session, clk clock.Clock, kubeClient client.Client, recorder events.Recorder,
-	unavailableOfferings *cache.UnavailableOfferings, cloudProvider *cloudprovider.CloudProvider, subnetProvider *subnet.Provider,
-	securityGroupProvider *securitygroup.Provider, instanceProfileProvider *instanceprofile.Provider, pricingProvider *pricing.Provider,
-	amiProvider *amifamily.Provider) []controller.Controller {
+func NewControllers(
+	clock clock.Clock,
+	kubeClient client.Client,
+	kubernetesInterface kubernetes.Interface,
+	cluster *state.Cluster,
+	recorder events.Recorder,
+	cloudProvider cloudprovider.CloudProvider,
+) []controller.Controller {
 
-	logging.FromContext(ctx).With("version", project.Version).Debugf("discovered version")
+	p := provisioning.NewProvisioner(kubeClient, kubernetesInterface.CoreV1(), recorder, cloudProvider, cluster)
+	evictionQueue := terminator.NewQueue(kubernetesInterface.CoreV1(), recorder)
+	disruptionQueue := orchestration.NewQueue(kubeClient, recorder, cluster, clock, p)
 
-	linkController := nodeclaimlink.NewController(kubeClient, cloudProvider)
-	controllers := []controller.Controller{
-		nodeclass.NewNodeTemplateController(kubeClient, recorder, subnetProvider, securityGroupProvider, amiProvider, instanceProfileProvider),
-		linkController,
-		nodeclaimgarbagecollection.NewController(kubeClient, cloudProvider, linkController),
+	return []controller.Controller{
+		p, evictionQueue, disruptionQueue,
+		disruption.NewController(clock, kubeClient, p, cloudProvider, recorder, cluster, disruptionQueue),
+		provisioning.NewController(kubeClient, p, recorder),
+		nodepoolhash.NewNodePoolController(kubeClient),
+		informer.NewDaemonSetController(kubeClient, cluster),
+		informer.NewNodeController(kubeClient, cluster),
+		informer.NewPodController(kubeClient, cluster),
+		informer.NewNodePoolController(kubeClient, cluster),
+		informer.NewNodeClaimController(kubeClient, cluster),
+		termination.NewController(kubeClient, cloudProvider, terminator.NewTerminator(clock, kubeClient, evictionQueue), recorder),
+		metricspod.NewController(kubeClient),
+		metricsnodepool.NewController(kubeClient),
+		metricsnode.NewController(cluster),
+		nodepoolcounter.NewNodePoolController(kubeClient, cluster),
+		nodeclaimconsistency.NewNodeClaimController(clock, kubeClient, recorder, cloudProvider),
+		nodeclaimlifecycle.NewNodeClaimController(clock, kubeClient, cloudProvider, recorder),
+		nodeclaimgarbagecollection.NewController(clock, kubeClient, cloudProvider),
+		nodeclaimtermination.NewNodeClaimController(kubeClient, cloudProvider),
+		nodeclaimdisruption.NewNodeClaimController(clock, kubeClient, cluster, cloudProvider),
+		leasegarbagecollection.NewController(kubeClient),
 	}
-	if settings.FromContext(ctx).InterruptionQueueName != "" {
-		controllers = append(controllers, interruption.NewController(kubeClient, clk, recorder, interruption.NewSQSProvider(sqs.New(sess)), unavailableOfferings))
-	}
-	if settings.FromContext(ctx).IsolatedVPC {
-		logging.FromContext(ctx).Infof("assuming isolated VPC, pricing information will not be updated")
-	} else {
-		controllers = append(controllers, pricing.NewController(pricingProvider))
-	}
-	return controllers
 }

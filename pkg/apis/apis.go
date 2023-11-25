@@ -12,50 +12,38 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-// Package apis contains Kubernetes API groups.
 package apis
 
 import (
 	_ "embed"
 
+	"github.com/samber/lo"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 
-	"github.com/aws/karpenter-core/pkg/operator/scheme"
-	"github.com/aws/karpenter/pkg/apis/settings"
-	"github.com/aws/karpenter/pkg/apis/v1beta1"
-
-	"github.com/samber/lo"
-
-	"github.com/aws/karpenter-core/pkg/apis"
-	coresettings "github.com/aws/karpenter-core/pkg/apis/settings"
+	"github.com/aws/karpenter-core/pkg/apis/settings"
+	"github.com/aws/karpenter-core/pkg/apis/v1beta1"
 	"github.com/aws/karpenter-core/pkg/utils/functional"
-	"github.com/aws/karpenter/pkg/apis/v1alpha1"
 )
 
 var (
 	// Builder includes all types within the apis package
 	Builder = runtime.NewSchemeBuilder(
-		v1alpha1.SchemeBuilder.AddToScheme,
 		v1beta1.SchemeBuilder.AddToScheme,
 	)
 	// AddToScheme may be used to add all resources defined in the project to a Scheme
 	AddToScheme = Builder.AddToScheme
-	Settings    = []coresettings.Injectable{&settings.Settings{}}
+	Settings    = []settings.Injectable{&settings.Settings{}}
 )
 
 //go:generate controller-gen crd object:headerFile="../../hack/boilerplate.go.txt" paths="./..." output:crd:artifacts:config=crds
 var (
-	//go:embed crds/karpenter.k8s.aws_awsnodetemplates.yaml
-	AWSNodeTemplateCRD []byte
-	//go:embed crds/karpenter.k8s.aws_ec2nodeclasses.yaml
-	EC2NodeClassCRD []byte
-	CRDs            = append(apis.CRDs,
-		lo.Must(functional.Unmarshal[v1.CustomResourceDefinition](AWSNodeTemplateCRD)),
-		lo.Must(functional.Unmarshal[v1.CustomResourceDefinition](EC2NodeClassCRD)),
-	)
+	//go:embed crds/karpenter.sh_nodepools.yaml
+	NodePoolCRD []byte
+	//go:embed crds/karpenter.sh_nodeclaims.yaml
+	NodeClaimCRD []byte
+	CRDs         = []*v1.CustomResourceDefinition{
+		lo.Must(functional.Unmarshal[v1.CustomResourceDefinition](NodePoolCRD)),
+		lo.Must(functional.Unmarshal[v1.CustomResourceDefinition](NodeClaimCRD)),
+	}
 )
-
-func init() {
-	lo.Must0(AddToScheme(scheme.Scheme))
-}

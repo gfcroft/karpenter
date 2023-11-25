@@ -4,13 +4,8 @@ coverage.html
 *.test
 *.cpuprofile
 *.heapprofile
-go.work
-go.work.sum
 
-# Environment
+# Common in OSs and IDEs
 .idea
 .vscode
 .DS_Store
-
-# Project Specific
-*.csv

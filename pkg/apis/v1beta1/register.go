@@ -20,14 +20,19 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
-const Group = "karpenter.k8s.aws"
+const (
+	Group              = "karpenter.sh"
+	CompatabilityGroup = "compatibility." + Group
+)
 
 var (
 	SchemeGroupVersion = schema.GroupVersion{Group: Group, Version: "v1beta1"}
 	SchemeBuilder      = runtime.NewSchemeBuilder(func(scheme *runtime.Scheme) error {
 		scheme.AddKnownTypes(SchemeGroupVersion,
-			&EC2NodeClass{},
-			&EC2NodeClassList{},
+			&NodePool{},
+			&NodePoolList{},
+			&NodeClaim{},
+			&NodeClaimList{},
 		)
 		metav1.AddToGroupVersion(scheme, SchemeGroupVersion)
 		return nil

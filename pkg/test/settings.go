@@ -16,43 +16,29 @@ package test
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/imdario/mergo"
-	"github.com/samber/lo"
 
-	awssettings "github.com/aws/karpenter/pkg/apis/settings"
+	"github.com/aws/karpenter-core/pkg/apis/settings"
 )
 
-type SettingOptions struct {
-	ClusterName                *string
-	ClusterEndpoint            *string
-	DefaultInstanceProfile     *string
-	EnablePodENI               *bool
-	EnableENILimitedPodDensity *bool
-	IsolatedVPC                *bool
-	VMMemoryOverheadPercent    *float64
-	InterruptionQueueName      *string
-	Tags                       map[string]string
-	ReservedENIs               *int
-}
-
-func Settings(overrides ...SettingOptions) *awssettings.Settings {
-	options := SettingOptions{}
-	for _, override := range overrides {
-		if err := mergo.Merge(&options, override, mergo.WithOverride); err != nil {
-			panic(fmt.Sprintf("Failed to merge settings: %s", err))
+func Settings(overrides ...settings.Settings) *settings.Settings {
+	options := settings.Settings{}
+	for _, opts := range overrides {
+		if err := mergo.Merge(&options, opts, mergo.WithOverride); err != nil {
+			panic(fmt.Sprintf("Failed to merge pod options: %s", err))
 		}
 	}
-	return &awssettings.Settings{
-		ClusterName:                lo.FromPtrOr(options.ClusterName, "test-cluster"),
-		ClusterEndpoint:            lo.FromPtrOr(options.ClusterEndpoint, "https://test-cluster"),
-		DefaultInstanceProfile:     lo.FromPtrOr(options.DefaultInstanceProfile, "test-instance-profile"),
-		EnablePodENI:               lo.FromPtrOr(options.EnablePodENI, true),
-		EnableENILimitedPodDensity: lo.FromPtrOr(options.EnableENILimitedPodDensity, true),
-		IsolatedVPC:                lo.FromPtrOr(options.IsolatedVPC, false),
-		VMMemoryOverheadPercent:    lo.FromPtrOr(options.VMMemoryOverheadPercent, 0.075),
-		InterruptionQueueName:      lo.FromPtrOr(options.InterruptionQueueName, ""),
-		Tags:                       options.Tags,
-		ReservedENIs:               lo.FromPtrOr(options.ReservedENIs, 0),
+	if options.BatchMaxDuration == 0 {
+		options.BatchMaxDuration = 10 * time.Second
+	}
+	if options.BatchIdleDuration == 0 {
+		options.BatchIdleDuration = time.Second
+	}
+	return &settings.Settings{
+		BatchMaxDuration:  options.BatchMaxDuration,
+		BatchIdleDuration: options.BatchIdleDuration,
+		DriftEnabled:      options.DriftEnabled,
 	}
 }
