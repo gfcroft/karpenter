@@ -20,9 +20,9 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
+<<<<<<< HEAD
 <<<<<<< HEAD
 	"github.com/samber/lo"
 	cliflag "k8s.io/component-base/cli/flag"
@@ -67,6 +67,10 @@ type Options struct {
 	coreoptions "github.com/aws/karpenter-core/pkg/operator/options"
 	"github.com/aws/karpenter-core/pkg/utils/env"
 	"github.com/aws/karpenter/pkg/apis/settings"
+=======
+	coreoptions "sigs.k8s.io/karpenter/pkg/operator/options"
+	"sigs.k8s.io/karpenter/pkg/utils/env"
+>>>>>>> 6ebba50ce424ccd5e33b3c84b4f10a8e78d54539
 )
 
 func init() {
@@ -85,9 +89,12 @@ type Options struct {
 	VMMemoryOverheadPercent float64
 	InterruptionQueue       string
 	ReservedENIs            int
+<<<<<<< HEAD
 >>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
 
 	setFlags map[string]bool
+=======
+>>>>>>> 6ebba50ce424ccd5e33b3c84b4f10a8e78d54539
 }
 
 <<<<<<< HEAD
@@ -148,6 +155,7 @@ func (o *Options) Parse(fs *coreoptions.FlagSet, args ...string) error {
 		}
 		return fmt.Errorf("parsing flags, %w", err)
 	}
+<<<<<<< HEAD
 
 <<<<<<< HEAD
 	if !lo.Contains(validLogLevels, o.LogLevel) {
@@ -190,6 +198,11 @@ func (o *Options) Parse(fs *coreoptions.FlagSet, args ...string) error {
 	}
 
 >>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
+=======
+	if err := o.Validate(); err != nil {
+		return fmt.Errorf("validating options, %w", err)
+	}
+>>>>>>> 6ebba50ce424ccd5e33b3c84b4f10a8e78d54539
 	return nil
 }
 
@@ -197,6 +210,7 @@ func (o *Options) ToContext(ctx context.Context) context.Context {
 	return ToContext(ctx, o)
 }
 
+<<<<<<< HEAD
 func (o *Options) MergeSettings(ctx context.Context) {
 	s := settings.FromContext(ctx)
 <<<<<<< HEAD
@@ -241,6 +255,8 @@ func ParseFeatureGates(gateStr string) (FeatureGates, error) {
 >>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
 }
 
+=======
+>>>>>>> 6ebba50ce424ccd5e33b3c84b4f10a8e78d54539
 func ToContext(ctx context.Context, opts *Options) context.Context {
 	return context.WithValue(ctx, optionsKey{}, opts)
 }
@@ -259,6 +275,7 @@ func FromContext(ctx context.Context) *Options {
 	}
 	return retval.(*Options)
 }
+<<<<<<< HEAD
 
 // Note: Separated out to help with cyclomatic complexity check
 func mergeField[T any](dest *T, src T, isDestSet bool) {
@@ -267,3 +284,5 @@ func mergeField[T any](dest *T, src T, isDestSet bool) {
 	}
 }
 >>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
+=======
+>>>>>>> 6ebba50ce424ccd5e33b3c84b4f10a8e78d54539

@@ -42,6 +42,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 	"github.com/aws/karpenter-core/pkg/apis/v1alpha5"
 	"github.com/aws/karpenter-core/pkg/apis/v1beta1"
 	"github.com/aws/karpenter-core/pkg/operator/logging"
@@ -52,6 +53,9 @@ import (
 	"github.com/aws/karpenter/pkg/apis/v1alpha5"
 	"github.com/aws/karpenter/pkg/apis/v1beta1"
 >>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
+=======
+	"github.com/aws/karpenter-provider-aws/pkg/apis/v1beta1"
+>>>>>>> 6ebba50ce424ccd5e33b3c84b4f10a8e78d54539
 )
 
 const component = "webhook"
@@ -178,8 +182,12 @@ func HealthProbe(ctx context.Context) healthz.Checker {
 	}
 =======
 var Resources = map[schema.GroupVersionKind]resourcesemantics.GenericCRD{
+<<<<<<< HEAD
 	v1alpha1.SchemeGroupVersion.WithKind("AWSNodeTemplate"): &v1alpha1.AWSNodeTemplate{},
 	corev1alpha5.SchemeGroupVersion.WithKind("Provisioner"): &v1alpha5.Provisioner{},
 	v1beta1.SchemeGroupVersion.WithKind("EC2NodeClass"):     &v1beta1.EC2NodeClass{},
 >>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
+=======
+	v1beta1.SchemeGroupVersion.WithKind("EC2NodeClass"): &v1beta1.EC2NodeClass{},
+>>>>>>> 6ebba50ce424ccd5e33b3c84b4f10a8e78d54539
 }

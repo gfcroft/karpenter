@@ -1,0 +1,56 @@
+{
+
+                "IamInstanceProfile": {
+                    "Name": "KarpenterNodeInstanceProfile-george-karpenter-demo"
+                },
+                "BlockDeviceMappings": [
+                    {
+                        "DeviceName": "/dev/xvda",
+                        "Ebs": {
+                            "Encrypted": true,
+                            "VolumeSize": 20,
+                            "VolumeType": "gp3"
+                        }
+                    }
+                ],
+                "ImageId": "ami-08863056f2ff03fad",
+                "Monitoring": {
+                    "Enabled": false
+                },
+                "UserData": "TUlNRS1WZXJzaW9uOiAxLjAKQ29udGVudC1UeXBlOiBtdWx0aXBhcnQvbWl4ZWQ7IGJvdW5kYXJ5PSIvLyIKCi0tLy8KQ29udGVudC1UeXBlOiB0ZXh0L3gtc2hlbGxzY3JpcHQ7IGNoYXJzZXQ9InVzLWFzY2lpIgoKIyEvYmluL2Jhc2ggLXhlCmV4ZWMgPiA+KHRlZSAvdmFyL2xvZy91c2VyLWRhdGEubG9nfGxvZ2dlciAtdCB1c2VyLWRhdGEgLXMgMj4vZGV2L2NvbnNvbGUpIDI+JjEKL2V0Yy9la3MvYm9vdHN0cmFwLnNoICdnZW9yZ2Uta2FycGVudGVyLWRlbW8nIC0tYXBpc2VydmVyLWVuZHBvaW50ICdodHRwczovLzdBNTc2RkVCMERGOTMyNDkxNUFBMjgzMjJDMkI5QjJCLnlsNC5ldS13ZXN0LTEuZWtzLmFtYXpvbmF3cy5jb20nIC0tYjY0LWNsdXN0ZXItY2EgJ0xTMHRMUzFDUlVkSlRpQkRSVkpVU1VaSlEwRlVSUzB0TFMwdENrMUpTVVJDVkVORFFXVXlaMEYzU1VKQlowbEpSM0pVTVVJME0zcEJhakIzUkZGWlNrdHZXa2xvZG1OT1FWRkZURUpSUVhkR1ZFVlVUVUpGUjBFeFZVVUtRWGhOUzJFelZtbGFXRXAxV2xoU2JHTjZRV1ZHZHpCNVRYcEJOVTFVWjNsTlJFVjNUWHBHWVVaM01IcE5la0UxVFZSVmVVMUVSWGROZWtaaFRVSlZlQXBGZWtGU1FtZE9Wa0pCVFZSRGJYUXhXVzFXZVdKdFZqQmFXRTEzWjJkRmFVMUJNRWREVTNGSFUwbGlNMFJSUlVKQlVWVkJRVFJKUWtSM1FYZG5aMFZMQ2tGdlNVSkJVVVJRY21ZelNIVnRaRWREZUVwdFZsTXZkVzgzYUdrd1VGTmxTa3BZYjJkdk16SnBhVlJsU2s5dFQwNXZjRko2VTJSeWRUa3dTVlJWTDBrS2EyRkxNbkJSWlZFeFNHa3ZlWFJoVm5WUGRGaEVlWHBEYWpOS2VVTndObVZTT0VackwwWkhlSFZNV2pkT05qTlBZVWxxVEVWTVkzUkdTR3BsUkV4UlVRcFJiRk5HYVVoSlVWZFlXazlOVW05a1RUVTBVbUZ2UWxnMU9FdGxjRWRtUlV0R1QzbFhaemMzZGpKU09XWkNOVkJvYlROcmRYQkllVlZCVVZONFJYSlBDblpVZUc1QmFFUm1UVGx5VEVreVRFMVRlRzVyVjNoNlptVTNZMDlHTkhwV1VYcDNValpaWXpoeE1sVTJMMjlrVTJKU1VtWkNNVXhzY2xCVlpUZFJZV2dLVTFoQ2VFRmFORGhNYkd4TFFreGtTMDlNYTJGaldESnZZVVpvVUdJcmIzRjZTVVJzYjBoc01IWjVTWGt6VUVseWJURjZZVGxuUkdGSlUwSkpXRFpxWlFwbFUxUnpXV1UwYVV0VFJqZ3dTa05pYW5CVGRua3lVVzUwYzJ4UVFXZE5Ra0ZCUjJwWFZFSllUVUUwUjBFeFZXUkVkMFZDTDNkUlJVRjNTVU53UkVGUUNrSm5UbFpJVWsxQ1FXWTRSVUpVUVVSQlVVZ3ZUVUl3UjBFeFZXUkVaMUZYUWtKVVV5dGplbmczZUdKMFkzSktURWw1UmxoM1VXbEdaR05UV1hkNlFWWUtRbWRPVmtoU1JVVkVha0ZOWjJkd2NtUlhTbXhqYlRWc1pFZFdlazFCTUVkRFUzRkhVMGxpTTBSUlJVSkRkMVZCUVRSSlFrRlJRbFJqWTJ0WlN6aGxjUXAyTW1GNk5FdENWV0ZKUVdWS1JsSXdSVGxHUkVWaE1rUnlaMWw0VjFoNFpYZzJPRVV2YjFCbUwyeHVMM2cyUTNwNWJtWXJaSHBwVTJOWFNETnlTMmN4Q2tobVJWZGtMMGxrTVdSd05YbEdkSEpSV2swclF6TjVaalozVXk5TFpXeEthRlp2VjBFdmJGVlhRVTh2U1ZwYWRHVnRMMk5TVTJGalVFOHpWRFF5YUVzS04zZzNOSEZUV0hORk1XUndVazl1UWtrM1FuWXdNbkpOYVRnMFNHY3ZTV3d2Y0RrdlZrOUdibmRoVWk5UmJuZzFNa05NTDFwdGMyOHhVREFyYTNreFJ3cHZZWGREVFhORU0wcGxiSEF4VDJ0TU4zRndWMGQ0ZFhKdFNFZHdja1pCVEZKcmJrdFZXWGN6WkZGV2REWTRWbE14V1RacFNDdDJUMU5EVGtkQ2EwaHZDbGw0VUU5SWFHVnpOMDl6WlZocGNuZFhTRGsyYnpGek9HcHlkV3hNY1RVd1dHazFXa3hWVW5OUmFIQnFLMjVKY1VaWVZtbHlkbXBMVTB4amVIQnJTeklLY0V3ek1XcDNNVTF1TmxVMkNpMHRMUzB0UlU1RUlFTkZVbFJKUmtsRFFWUkZMUzB0TFMwSycgXAotLWNvbnRhaW5lci1ydW50aW1lIGNvbnRhaW5lcmQgXAotLWRucy1jbHVzdGVyLWlwICcxMC4xMDAuMC4xMCcgXAotLXVzZS1tYXgtcG9kcyBmYWxzZSBcCi0ta3ViZWxldC1leHRyYS1hcmdzICctLW5vZGUtbGFiZWxzPSJrYXJwZW50ZXIuc2gvY2FwYWNpdHktdHlwZT1zcG90LGthcnBlbnRlci5zaC9wcm92aXNpb25lci1uYW1lPWRlZmF1bHQiIC0tbWF4LXBvZHM9NTgnCi0tLy8tLQo=",
+                "TagSpecifications": [
+                    {
+                        "ResourceType": "network-interface",
+                        "Tags": [
+                            {
+                                "Key": "Name",
+                                "Value": "karpenter.sh/provisioner-name/default"
+                            },
+                            {
+                                "Key": "karpenter.sh/provisioner-name",
+                                "Value": "default"
+                            },
+                            {
+                                "Key": "karpenter.sh/managed-by",
+                                "Value": "george-karpenter-demo"
+                            },
+                            {
+                                "Key": "kubernetes.io/cluster/george-karpenter-demo",
+                                "Value": "owned"
+                            }
+                        ]
+                    }
+                ],
+                "SecurityGroupIds": [
+                    "sg-00e22d40d39759cba",
+                    "sg-0fbd667b7e1bfd6f0"
+                ],
+                "MetadataOptions": {
+                    "HttpTokens": "required",
+                    "HttpPutResponseHopLimit": 2,
+                    "HttpEndpoint": "enabled",
+                    "HttpProtocolIpv6": "disabled"
+                }
+
+
+}

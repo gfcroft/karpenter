@@ -1,0 +1,93 @@
+{
+  "LaunchTemplateId": "lt-009d0f61371cfa631",
+  "LaunchTemplateName": "eks-bec53f20-7a17-7bed-1b53-47321e40e48d",
+  "VersionNumber": 1,
+  "CreateTime": "2023-09-10T08:43:12.000Z",
+  "CreatedBy": "arn:aws:sts::743427781614:assumed-role/AWSServiceRoleForAmazonEKSNodegroup/EKS",
+  "DefaultVersion": true,
+  "LaunchTemplateData": {
+    "IamInstanceProfile": {
+      "Name": "eks-bec53f20-7a17-7bed-1b53-47321e40e48d"
+    },
+    "BlockDeviceMappings": [
+      {
+        "DeviceName": "/dev/xvda",
+        "Ebs": {
+          "Iops": 3000,
+          "VolumeSize": 80,
+          "VolumeType": "gp3",
+          "Throughput": 125
+        }
+      }
+    ],
+    "ImageId": "ami-08863056f2ff03fad",
+    "UserData": "TUlNRS1WZXJzaW9uOiAxLjAKQ29udGVudC1UeXBlOiBtdWx0aXBhcnQvbWl4ZWQ7IGJvdW5kYXJ5PSIvLyIKCi0tLy8KQ29udGVudC1UeXBlOiB0ZXh0L3gtc2hlbGxzY3JpcHQ7IGNoYXJzZXQ9InVzLWFzY2lpIgojIS9iaW4vYmFzaApzZXQgLWV4CkI2NF9DTFVTVEVSX0NBPUxTMHRMUzFDUlVkSlRpQkRSVkpVU1VaSlEwRlVSUzB0TFMwdENrMUpTVVJDVkVORFFXVXlaMEYzU1VKQlowbEpZazVUYkZGNFVUVlFjMDEzUkZGWlNrdHZXa2xvZG1OT1FWRkZURUpSUVhkR1ZFVlVUVUpGUjBFeFZVVUtRWGhOUzJFelZtbGFXRXAxV2xoU2JHTjZRV1ZHZHpCNVRYcEJOVTFVUVhkUFJFMHhUVVJzWVVaM01IcE5la0UxVFVSamQwOUVUVEZOUkd4aFRVSlZlQXBGZWtGU1FtZE9Wa0pCVFZSRGJYUXhXVzFXZVdKdFZqQmFXRTEzWjJkRmFVMUJNRWREVTNGSFUwbGlNMFJSUlVKQlVWVkJRVFJKUWtSM1FYZG5aMFZMQ2tGdlNVSkJVVVJrY0hrd0wyNXlaRFVyTmtNd2QycElWRFJMV25KTVV6UlZjVE5XTlc1M09WazVWRVZqTnpSNWVGbG9abXRGZEVaUWFrNUNXbGRHWjJ3S1VFdE5UV3g2T1ZKaWEyZHJUSG80T1U1bldqRlZPWEZPYzJ4aFVVWjRTWE5UWVRSelUxUXZNbTl2YUhjdk9VVk9SVTEyUzBOaUwwaE1ZbXAzV2pFNFVBcE1XSFJTYzNSelpuaGtla3RvUTNkR1lXZEJVSEpsV1c1dGFEQXdZVm8wWjFOaGR6TlZSbko0VkVaNloxVk5Za00zTDA1RWNtSnZSMXB4Y0RoM1p6aERDa05aYUd3clV6bExVRFJtUmpCUWREWklVVnBRYUhNNVYwVndPVnBrY2sxcVRYTTRlVEl5VW14SlEyaE5jVXQxTVcxcVVXZHJWVFJwTVdRM1FXMDJTVEVLUmxKeVJYbzJlVzFwVkRkWVFUaDNOREJhZDBsa1ZYUkpaWFI0Y0VObE9UbGtlRXB1YWtaM1luRk9lRGhIV1RSUVRWQlJaVEp5VTA1UlpHVjBkbmhTYlFwSWJUVTNkRTF3WW5sWmVVMU5SVUVyT0dFMldHSlZXa0YxUTNjM1FXZE5Ra0ZCUjJwWFZFSllUVUUwUjBFeFZXUkVkMFZDTDNkUlJVRjNTVU53UkVGUUNrSm5UbFpJVWsxQ1FXWTRSVUpVUVVSQlVVZ3ZUVUl3UjBFeFZXUkVaMUZYUWtKVGJXUnlZVkk1TDJZeloyVkhjbEZEYjFOU2JXUjRUWHBwTkc5RVFWWUtRbWRPVmtoU1JVVkVha0ZOWjJkd2NtUlhTbXhqYlRWc1pFZFdlazFCTUVkRFUzRkhVMGxpTTBSUlJVSkRkMVZCUVRSSlFrRlJRWGhIY0dGaU5tY3pZUXB2UmxNNGFuY3lSM294Wm1oemVqWjRUM2RvVkhKcGJ6aExRbEk1U0ZveVEwTndVRlUwTkZsaVMxaHhWREo1Y2t4RFYzUTBjbXc0ZUVsNlJWRlpNMjh3Q205MmVHNWhabFZ1YnpoM1psTTBjMjF5WkhwbmFEUmpjMVkxYms0eFQzWnJRV1I1V1dWdk5HbEdhbEpXTHpoT1RrVnpkbXg1YWxFeGFXTnhUa1ZuUW13S1JucHNOWEJITnlzd2NqQklZemhWVG1ZMWJIUkxaalY0U0RkeGJXWk5VMUF4Wmt3dlJHdGlPRTE2Um5NMWVXeFRWeXRZVURaR1dtRTJWVmxqYlZCdmN3cFpVMXB0TWpOWmFrcHZNSHBUTVhaWk1sWlVZemtyWjFkSmVWQnZWR2Q2VWtjNFFUTldNRlJFVVdsa0wxSTFjRXBSWVZVd016ZGthMkZJTjI5UmMwSTFDalpIVFd0cWNUUXdWMUZsVVRjdk5sSlFkMGhvTHl0NlJHazFZMWw1YjJSUGRIVlpaMDRyT0VORFZuVjRhamQ1Vm1oQmRIRlhibk5RTjB0dVRHZEZaSFFLYWxKa1RYSk5TemRMWlZocUNpMHRMUzB0UlU1RUlFTkZVbFJKUmtsRFFWUkZMUzB0TFMwSwpBUElfU0VSVkVSX1VSTD1odHRwczovLzlFMkQ3OTA1NDREMDEyMjU2RUFEMDExQ0Q5QkZEQjZGLmdyNy5ldS13ZXN0LTEuZWtzLmFtYXpvbmF3cy5jb20KSzhTX0NMVVNURVJfRE5TX0lQPTEwLjEwMC4wLjEwCi9ldGMvZWtzL2Jvb3RzdHJhcC5zaCBnZW9yZ2Uta2FycGVudGVyLWRlbW8gLS1rdWJlbGV0LWV4dHJhLWFyZ3MgJy0tbm9kZS1sYWJlbHM9ZWtzLmFtYXpvbmF3cy5jb20vc291cmNlTGF1bmNoVGVtcGxhdGVWZXJzaW9uPTEsYWxwaGEuZWtzY3RsLmlvL2NsdXN0ZXItbmFtZT1nZW9yZ2Uta2FycGVudGVyLWRlbW8sYWxwaGEuZWtzY3RsLmlvL25vZGVncm91cC1uYW1lPWdlb3JnZS1rYXJwZW50ZXItZGVtby1uZyxla3MuYW1hem9uYXdzLmNvbS9ub2RlZ3JvdXAtaW1hZ2U9YW1pLTA4ODYzMDU2ZjJmZjAzZmFkLGVrcy5hbWF6b25hd3MuY29tL2NhcGFjaXR5VHlwZT1PTl9ERU1BTkQsZWtzLmFtYXpvbmF3cy5jb20vbm9kZWdyb3VwPWdlb3JnZS1rYXJwZW50ZXItZGVtby1uZyxla3MuYW1hem9uYXdzLmNvbS9zb3VyY2VMYXVuY2hUZW1wbGF0ZUlkPWx0LTBmNmY2Yzc3MGQ4M2UyYjU4IC0tbWF4LXBvZHM9MjknIC0tYjY0LWNsdXN0ZXItY2EgJEI2NF9DTFVTVEVSX0NBIC0tYXBpc2VydmVyLWVuZHBvaW50ICRBUElfU0VSVkVSX1VSTCAtLWRucy1jbHVzdGVyLWlwICRLOFNfQ0xVU1RFUl9ETlNfSVAgLS11c2UtbWF4LXBvZHMgZmFsc2UKCi0tLy8tLQ==",
+    "TagSpecifications": [
+      {
+        "ResourceType": "volume",
+        "Tags": [
+          {
+            "Key": "eks:nodegroup-name",
+            "Value": "george-karpenter-demo-ng"
+          },
+          {
+            "Key": "alpha.eksctl.io/nodegroup-type",
+            "Value": "managed"
+          },
+          {
+            "Key": "eks:cluster-name",
+            "Value": "george-karpenter-demo"
+          },
+          {
+            "Key": "alpha.eksctl.io/nodegroup-name",
+            "Value": "george-karpenter-demo-ng"
+          },
+          {
+            "Key": "karpenter.sh/discovery",
+            "Value": "george-karpenter-demo"
+          },
+          {
+            "Key": "Name",
+            "Value": "george-karpenter-demo-george-karpenter-demo-ng-Node"
+          }
+        ]
+      },
+      {
+        "ResourceType": "instance",
+        "Tags": [
+          {
+            "Key": "eks:nodegroup-name",
+            "Value": "george-karpenter-demo-ng"
+          },
+          {
+            "Key": "alpha.eksctl.io/nodegroup-type",
+            "Value": "managed"
+          },
+          {
+            "Key": "eks:cluster-name",
+            "Value": "george-karpenter-demo"
+          },
+          {
+            "Key": "alpha.eksctl.io/nodegroup-name",
+            "Value": "george-karpenter-demo-ng"
+          },
+          {
+            "Key": "karpenter.sh/discovery",
+            "Value": "george-karpenter-demo"
+          },
+          {
+            "Key": "Name",
+            "Value": "george-karpenter-demo-george-karpenter-demo-ng-Node"
+          }
+        ]
+      }
+    ],
+    "SecurityGroupIds": [
+      "sg-0d5b75daf33486cc8"
+    ],
+    "MetadataOptions": {
+      "HttpTokens": "required",
+      "HttpPutResponseHopLimit": 2
+    }
+  }
+}

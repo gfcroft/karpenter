@@ -22,6 +22,7 @@ import (
 	"github.com/samber/lo"
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 	"github.com/aws/karpenter-core/pkg/operator/options"
 )
 
@@ -48,6 +49,9 @@ type FeatureGates struct {
 	Drift *bool
 =======
 	"github.com/aws/karpenter/pkg/operator/options"
+=======
+	"github.com/aws/karpenter-provider-aws/pkg/operator/options"
+>>>>>>> 6ebba50ce424ccd5e33b3c84b4f10a8e78d54539
 )
 
 type OptionsFields struct {

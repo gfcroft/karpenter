@@ -23,6 +23,7 @@ import (
 	. "knative.dev/pkg/logging/testing"
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 	"github.com/aws/karpenter-core/pkg/apis"
 	"github.com/aws/karpenter-core/pkg/operator/scheme"
 	"github.com/aws/karpenter-core/pkg/test"
@@ -33,11 +34,15 @@ var ctx context.Context
 var env *test.Environment
 =======
 	. "github.com/aws/karpenter-core/pkg/test/expectations"
+=======
+	. "sigs.k8s.io/karpenter/pkg/test/expectations"
+>>>>>>> 6ebba50ce424ccd5e33b3c84b4f10a8e78d54539
 
-	"github.com/aws/karpenter-core/pkg/operator/scheme"
-	coretest "github.com/aws/karpenter-core/pkg/test"
-	"github.com/aws/karpenter/pkg/apis"
-	"github.com/aws/karpenter/pkg/test"
+	"sigs.k8s.io/karpenter/pkg/operator/scheme"
+	coretest "sigs.k8s.io/karpenter/pkg/test"
+
+	"github.com/aws/karpenter-provider-aws/pkg/apis"
+	"github.com/aws/karpenter-provider-aws/pkg/test"
 )
 
 var ctx context.Context

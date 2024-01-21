@@ -20,8 +20,6 @@ import (
 	"testing"
 	"time"
 
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
 	"github.com/samber/lo"
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -29,6 +27,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -37,11 +36,16 @@ import (
 	"github.com/aws/aws-sdk-go/service/eks"
 	"github.com/aws/aws-sdk-go/service/ssm"
 
-	corev1beta1 "github.com/aws/karpenter-core/pkg/apis/v1beta1"
-	coretest "github.com/aws/karpenter-core/pkg/test"
-	"github.com/aws/karpenter/pkg/apis/v1beta1"
-	"github.com/aws/karpenter/pkg/test"
-	"github.com/aws/karpenter/test/pkg/environment/aws"
+	corev1beta1 "sigs.k8s.io/karpenter/pkg/apis/v1beta1"
+	coretest "sigs.k8s.io/karpenter/pkg/test"
+
+	"github.com/aws/karpenter-provider-aws/pkg/apis/v1beta1"
+	"github.com/aws/karpenter-provider-aws/pkg/test"
+	"github.com/aws/karpenter-provider-aws/test/pkg/environment/aws"
+	"github.com/aws/karpenter-provider-aws/test/pkg/environment/common"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
 )
 
 var env *aws.Environment
@@ -68,7 +72,7 @@ var _ = BeforeEach(func() {
 var _ = AfterEach(func() { env.Cleanup() })
 var _ = AfterEach(func() { env.AfterEach() })
 
-var _ = Describe("Drift", Label("AWS"), func() {
+var _ = Describe("Drift", func() {
 	var dep *appsv1.Deployment
 	var selector labels.Selector
 	var numPods int
@@ -94,6 +98,318 @@ var _ = Describe("Drift", Label("AWS"), func() {
 
 		env.ExpectSettingsOverridden(v1.EnvVar{Name: "FEATURE_GATES", Value: "Drift=true"})
 	})
+	Context("Budgets", func() {
+		It("should respect budgets for empty drift", func() {
+			nodePool = coretest.ReplaceRequirements(nodePool,
+				v1.NodeSelectorRequirement{
+					Key:      v1beta1.LabelInstanceSize,
+					Operator: v1.NodeSelectorOpIn,
+					Values:   []string{"2xlarge"},
+				},
+			)
+			// We're expecting to create 3 nodes, so we'll expect to see 2 nodes deleting at one time.
+			nodePool.Spec.Disruption.Budgets = []corev1beta1.Budget{{
+				Nodes: "50%",
+			}}
+			var numPods int32 = 6
+			dep = coretest.Deployment(coretest.DeploymentOptions{
+				Replicas: numPods,
+				PodOptions: coretest.PodOptions{
+					ObjectMeta: metav1.ObjectMeta{
+						Annotations: map[string]string{
+							corev1beta1.DoNotDisruptAnnotationKey: "true",
+						},
+						Labels: map[string]string{"app": "large-app"},
+					},
+					// Each 2xlarge has 8 cpu, so each node should fit 2 pods.
+					ResourceRequirements: v1.ResourceRequirements{
+						Requests: v1.ResourceList{
+							v1.ResourceCPU: resource.MustParse("3"),
+						},
+					},
+				},
+			})
+			selector = labels.SelectorFromSet(dep.Spec.Selector.MatchLabels)
+			env.ExpectCreated(nodeClass, nodePool, dep)
+
+			nodeClaims := env.EventuallyExpectCreatedNodeClaimCount("==", 3)
+			nodes := env.EventuallyExpectCreatedNodeCount("==", 3)
+			env.EventuallyExpectHealthyPodCount(selector, int(numPods))
+			env.Monitor.Reset() // Reset the monitor so that we can expect a single node to be spun up after expiration
+
+			// List nodes so that we get any updated information on the nodes. If we don't
+			// we have the potential to over-write any changes Karpenter makes to the nodes.
+			// Add a finalizer to each node so that we can stop termination disruptions
+			By("adding finalizers to the nodes to prevent termination")
+			for _, node := range nodes {
+				Expect(env.Client.Get(env.Context, client.ObjectKeyFromObject(node), node)).To(Succeed())
+				node.Finalizers = append(node.Finalizers, common.TestingFinalizer)
+				env.ExpectUpdated(node)
+			}
+
+			By("making the nodes empty")
+			// Delete the deployment to make all nodes empty.
+			env.ExpectDeleted(dep)
+
+			// Drift the nodeclaims
+			By("drift the nodeclaims")
+			nodePool.Spec.Template.Annotations = map[string]string{"test": "annotation"}
+			env.ExpectUpdated(nodePool)
+
+			env.EventuallyExpectDrifted(nodeClaims...)
+
+			nodes = env.EventuallyExpectTaintedNodeCount("==", 2)
+
+			// Remove the finalizer from each node so that we can terminate
+			for _, node := range nodes {
+				Expect(env.ExpectTestingFinalizerRemoved(node)).To(Succeed())
+			}
+
+			// After the deletion timestamp is set and all pods are drained
+			// the node should be gone
+			env.EventuallyExpectNotFound(nodes[0], nodes[1])
+
+			nodes = env.EventuallyExpectTaintedNodeCount("==", 1)
+			Expect(env.ExpectTestingFinalizerRemoved(nodes[0])).To(Succeed())
+			env.EventuallyExpectNotFound(nodes[0])
+		})
+		It("should respect budgets for non-empty delete drift", func() {
+			nodePool = coretest.ReplaceRequirements(nodePool,
+				v1.NodeSelectorRequirement{
+					Key:      v1beta1.LabelInstanceSize,
+					Operator: v1.NodeSelectorOpIn,
+					Values:   []string{"2xlarge"},
+				},
+			)
+			// We're expecting to create 3 nodes, so we'll expect to see at most 2 nodes deleting at one time.
+			nodePool.Spec.Disruption.Budgets = []corev1beta1.Budget{{
+				Nodes: "50%",
+			}}
+			var numPods int32 = 9
+			dep = coretest.Deployment(coretest.DeploymentOptions{
+				Replicas: numPods,
+				PodOptions: coretest.PodOptions{
+					ObjectMeta: metav1.ObjectMeta{
+						Annotations: map[string]string{
+							corev1beta1.DoNotDisruptAnnotationKey: "true",
+						},
+						Labels: map[string]string{"app": "large-app"},
+					},
+					// Each 2xlarge has 8 cpu, so each node should fit no more than 3 pods.
+					ResourceRequirements: v1.ResourceRequirements{
+						Requests: v1.ResourceList{
+							v1.ResourceCPU: resource.MustParse("2100m"),
+						},
+					},
+				},
+			})
+			selector = labels.SelectorFromSet(dep.Spec.Selector.MatchLabels)
+			env.ExpectCreated(nodeClass, nodePool, dep)
+
+			nodeClaims := env.EventuallyExpectCreatedNodeClaimCount("==", 3)
+			nodes := env.EventuallyExpectCreatedNodeCount("==", 3)
+			env.EventuallyExpectHealthyPodCount(selector, int(numPods))
+			env.Monitor.Reset() // Reset the monitor so that we can expect a single node to be spun up after drift
+
+			By("scaling down the deployment")
+			// Update the deployment to a third of the replicas.
+			dep.Spec.Replicas = lo.ToPtr[int32](3)
+			env.ExpectUpdated(dep)
+
+			By("spreading the pods to each of the nodes")
+			env.EventuallyExpectHealthyPodCount(selector, 3)
+			// Delete pods from the deployment until each node has one pod.
+			var nodePods []*v1.Pod
+			for {
+				node, found := lo.Find(nodes, func(n *v1.Node) bool {
+					nodePods = env.ExpectHealthyPodsForNode(n.Name)
+					return len(nodePods) > 1
+				})
+				if !found {
+					break
+				}
+				// Set the nodes to unschedulable so that the pods won't reschedule.
+				Expect(env.Client.Get(env.Context, client.ObjectKeyFromObject(node), node)).To(Succeed())
+				node.Spec.Unschedulable = true
+				env.ExpectUpdated(node)
+				for _, pod := range nodePods[1:] {
+					env.ExpectDeleted(pod)
+				}
+				Eventually(func(g Gomega) {
+					g.Expect(len(env.ExpectHealthyPodsForNode(node.Name))).To(Equal(1))
+				}).WithTimeout(5 * time.Second).Should(Succeed())
+			}
+			env.EventuallyExpectHealthyPodCount(selector, 3)
+
+			By("cordoning and adding finalizer to the nodes")
+			// Add a finalizer to each node so that we can stop termination disruptions
+			for _, node := range nodes {
+				Expect(env.Client.Get(env.Context, client.ObjectKeyFromObject(node), node)).To(Succeed())
+				node.Finalizers = append(node.Finalizers, common.TestingFinalizer)
+				// Set nodes as unschedulable so that pod nomination doesn't delay disruption for the second disruption action
+				node.Spec.Unschedulable = true
+				env.ExpectUpdated(node)
+			}
+
+			By("drifting the nodes")
+			// Drift the nodeclaims
+			nodePool.Spec.Template.Annotations = map[string]string{"test": "annotation"}
+			env.ExpectUpdated(nodePool)
+
+			env.EventuallyExpectDrifted(nodeClaims...)
+
+			By("enabling disruption by removing the do not disrupt annotation")
+			pods := env.EventuallyExpectHealthyPodCount(selector, 3)
+			// Remove the do-not-disrupt annotation so that the nodes are now disruptable
+			for _, pod := range pods {
+				delete(pod.Annotations, corev1beta1.DoNotDisruptAnnotationKey)
+				env.ExpectUpdated(pod)
+			}
+
+			// Mark one node as schedulable so the other two nodes can schedule to this node and delete.
+			Expect(env.Client.Get(env.Context, client.ObjectKeyFromObject(nodes[0]), nodes[0])).To(Succeed())
+			nodes[0].Spec.Unschedulable = false
+			env.ExpectUpdated(nodes[0])
+			nodes = env.EventuallyExpectTaintedNodeCount("==", 2)
+
+			By("removing the finalizer from the nodes")
+			Expect(env.ExpectTestingFinalizerRemoved(nodes[0])).To(Succeed())
+			Expect(env.ExpectTestingFinalizerRemoved(nodes[1])).To(Succeed())
+
+			// After the deletion timestamp is set and all pods are drained
+			// the node should be gone
+			env.EventuallyExpectNotFound(nodes[0], nodes[1])
+		})
+		It("should respect budgets for non-empty replace drift", func() {
+			nodePool = coretest.ReplaceRequirements(nodePool,
+				v1.NodeSelectorRequirement{
+					Key:      v1beta1.LabelInstanceSize,
+					Operator: v1.NodeSelectorOpIn,
+					Values:   []string{"2xlarge"},
+				},
+			)
+			// We're expecting to create 3 nodes, so we'll expect to see at most 2 nodes deleting at one time.
+			nodePool.Spec.Disruption.Budgets = []corev1beta1.Budget{{
+				Nodes: "50%",
+			}}
+			var numPods int32 = 3
+			dep = coretest.Deployment(coretest.DeploymentOptions{
+				Replicas: numPods,
+				PodOptions: coretest.PodOptions{
+					ObjectMeta: metav1.ObjectMeta{
+						Annotations: map[string]string{
+							corev1beta1.DoNotDisruptAnnotationKey: "true",
+						},
+						Labels: map[string]string{"app": "large-app"},
+					},
+					// Each 2xlarge has 8 cpu, so each node should fit no more than 3 pods.
+					ResourceRequirements: v1.ResourceRequirements{
+						Requests: v1.ResourceList{
+							v1.ResourceCPU: resource.MustParse("5"),
+						},
+					},
+				},
+			})
+			selector = labels.SelectorFromSet(dep.Spec.Selector.MatchLabels)
+			env.ExpectCreated(nodeClass, nodePool, dep)
+
+			nodeClaims := env.EventuallyExpectCreatedNodeClaimCount("==", 3)
+			nodes := env.EventuallyExpectCreatedNodeCount("==", 3)
+			env.EventuallyExpectHealthyPodCount(selector, int(numPods))
+			env.Monitor.Reset() // Reset the monitor so that we can expect a single node to be spun up after drift
+
+			By("cordoning and adding finalizer to the nodes")
+			// Add a finalizer to each node so that we can stop termination disruptions
+			for _, node := range nodes {
+				Expect(env.Client.Get(env.Context, client.ObjectKeyFromObject(node), node)).To(Succeed())
+				node.Finalizers = append(node.Finalizers, common.TestingFinalizer)
+				// Set nodes as unschedulable so that pod nomination doesn't delay disruption for the second disruption action
+				env.ExpectUpdated(node)
+			}
+
+			By("drifting the nodes")
+			// Drift the nodeclaims
+			nodePool.Spec.Template.Annotations = map[string]string{"test": "annotation"}
+			env.ExpectUpdated(nodePool)
+
+			env.EventuallyExpectDrifted(nodeClaims...)
+
+			By("enabling disruption by removing the do not disrupt annotation")
+			pods := env.EventuallyExpectHealthyPodCount(selector, 3)
+			// Remove the do-not-disrupt annotation so that the nodes are now disruptable
+			for _, pod := range pods {
+				delete(pod.Annotations, corev1beta1.DoNotDisruptAnnotationKey)
+				env.ExpectUpdated(pod)
+			}
+
+			// Expect two nodes tainted, and 2 nodes created
+			tainted := env.EventuallyExpectTaintedNodeCount("==", 2)
+			env.EventuallyExpectCreatedNodeCount("==", 2)
+
+			Expect(env.ExpectTestingFinalizerRemoved(tainted[0])).To(Succeed())
+			Expect(env.ExpectTestingFinalizerRemoved(tainted[1])).To(Succeed())
+
+			env.EventuallyExpectNotFound(tainted[0], tainted[1])
+
+			// Expect one node tainted and a one more new node created.
+			tainted = env.EventuallyExpectTaintedNodeCount("==", 1)
+			env.EventuallyExpectCreatedNodeCount("==", 3)
+
+			Expect(env.ExpectTestingFinalizerRemoved(tainted[0])).To(Succeed())
+
+			// After the deletion timestamp is set and all pods are drained
+			// the node should be gone
+			env.EventuallyExpectNotFound(nodes[0], nodes[1], nodes[2])
+		})
+		It("should not allow drift if the budget is fully blocking", func() {
+			// We're going to define a budget that doesn't allow any drift to happen
+			nodePool.Spec.Disruption.Budgets = []corev1beta1.Budget{{
+				Nodes: "0",
+			}}
+
+			dep.Spec.Template.Annotations = nil
+			env.ExpectCreated(nodeClass, nodePool, dep)
+
+			nodeClaim := env.EventuallyExpectCreatedNodeClaimCount("==", 1)[0]
+			env.EventuallyExpectCreatedNodeCount("==", 1)
+			env.EventuallyExpectHealthyPodCount(selector, numPods)
+
+			By("drifting the nodes")
+			// Drift the nodeclaims
+			nodePool.Spec.Template.Annotations = map[string]string{"test": "annotation"}
+			env.ExpectUpdated(nodePool)
+
+			env.EventuallyExpectDrifted(nodeClaim)
+			env.ConsistentlyExpectNoDisruptions(1, "1m")
+		})
+		It("should not allow drift if the budget is fully blocking during a scheduled time", func() {
+			// We're going to define a budget that doesn't allow any drift to happen
+			// This is going to be on a schedule that only lasts 30 minutes, whose window starts 15 minutes before
+			// the current time and extends 15 minutes past the current time
+			// Times need to be in UTC since the karpenter containers were built in UTC time
+			windowStart := time.Now().Add(-time.Minute * 15).UTC()
+			nodePool.Spec.Disruption.Budgets = []corev1beta1.Budget{{
+				Nodes:    "0",
+				Schedule: lo.ToPtr(fmt.Sprintf("%d %d * * *", windowStart.Minute(), windowStart.Hour())),
+				Duration: &metav1.Duration{Duration: time.Minute * 30},
+			}}
+
+			dep.Spec.Template.Annotations = nil
+			env.ExpectCreated(nodeClass, nodePool, dep)
+
+			nodeClaim := env.EventuallyExpectCreatedNodeClaimCount("==", 1)[0]
+			env.EventuallyExpectCreatedNodeCount("==", 1)
+			env.EventuallyExpectHealthyPodCount(selector, numPods)
+
+			By("drifting the nodes")
+			// Drift the nodeclaims
+			nodePool.Spec.Template.Annotations = map[string]string{"test": "annotation"}
+			env.ExpectUpdated(nodePool)
+
+			env.EventuallyExpectDrifted(nodeClaim)
+			env.ConsistentlyExpectNoDisruptions(1, "1m")
+		})
+	})
 	It("should disrupt nodes that have drifted due to AMIs", func() {
 		// choose an old static image
 		parameter, err := env.SSMAPI.GetParameter(&ssm.GetParameterInput{
@@ -114,10 +430,7 @@ var _ = Describe("Drift", Label("AWS"), func() {
 		nodeClass.Spec.AMISelectorTerms = []v1beta1.AMISelectorTerm{{ID: amdAMI}}
 		env.ExpectCreatedOrUpdated(nodeClass)
 
-		Eventually(func(g Gomega) {
-			g.Expect(env.Client.Get(env, client.ObjectKeyFromObject(nodeClaim), nodeClaim)).To(Succeed())
-			g.Expect(nodeClaim.StatusConditions().GetCondition(corev1beta1.Drifted).IsTrue()).To(BeTrue())
-		}).Should(Succeed())
+		env.EventuallyExpectDrifted(nodeClaim)
 
 		delete(pod.Annotations, corev1beta1.DoNotDisruptAnnotationKey)
 		env.ExpectUpdated(pod)
@@ -143,11 +456,7 @@ var _ = Describe("Drift", Label("AWS"), func() {
 		nodeClass.Spec.AMISelectorTerms = []v1beta1.AMISelectorTerm{{ID: amdAMI}}
 		env.ExpectCreatedOrUpdated(nodeClass)
 
-		Eventually(func(g Gomega) {
-			g.Expect(env.Client.Get(env, client.ObjectKeyFromObject(nodeClaim), nodeClaim)).To(Succeed())
-			g.Expect(nodeClaim.StatusConditions().GetCondition(corev1beta1.Drifted)).ToNot(BeNil())
-			g.Expect(nodeClaim.StatusConditions().GetCondition(corev1beta1.Drifted).IsTrue()).To(BeTrue())
-		}).Should(Succeed())
+		env.EventuallyExpectDrifted(nodeClaim)
 
 		delete(pod.Annotations, corev1beta1.DoNotDisruptAnnotationKey)
 		env.ExpectUpdated(pod)
@@ -247,12 +556,7 @@ var _ = Describe("Drift", Label("AWS"), func() {
 		nodeClass.Spec.SecurityGroupSelectorTerms = sgTerms
 		env.ExpectCreatedOrUpdated(nodeClass)
 
-		By("validating the drifted status condition has propagated")
-		Eventually(func(g Gomega) {
-			g.Expect(env.Client.Get(env, client.ObjectKeyFromObject(nodeClaim), nodeClaim)).To(Succeed())
-			g.Expect(nodeClaim.StatusConditions().GetCondition(corev1beta1.Drifted)).ToNot(BeNil())
-			g.Expect(nodeClaim.StatusConditions().GetCondition(corev1beta1.Drifted).IsTrue()).To(BeTrue())
-		}).Should(Succeed())
+		env.EventuallyExpectDrifted(nodeClaim)
 
 		delete(pod.Annotations, corev1beta1.DoNotDisruptAnnotationKey)
 		env.ExpectUpdated(pod)
@@ -273,12 +577,7 @@ var _ = Describe("Drift", Label("AWS"), func() {
 		nodeClass.Spec.SubnetSelectorTerms = []v1beta1.SubnetSelectorTerm{{ID: subnets[1].ID}}
 		env.ExpectCreatedOrUpdated(nodeClass)
 
-		By("validating the drifted status condition has propagated")
-		Eventually(func(g Gomega) {
-			g.Expect(env.Client.Get(env, client.ObjectKeyFromObject(nodeClaim), nodeClaim)).To(Succeed())
-			g.Expect(nodeClaim.StatusConditions().GetCondition(corev1beta1.Drifted)).ToNot(BeNil())
-			g.Expect(nodeClaim.StatusConditions().GetCondition(corev1beta1.Drifted).IsTrue()).To(BeTrue())
-		}).Should(Succeed())
+		env.EventuallyExpectDrifted(nodeClaim)
 
 		delete(pod.Annotations, corev1beta1.DoNotDisruptAnnotationKey)
 		env.ExpectUpdated(pod)
@@ -311,12 +610,7 @@ var _ = Describe("Drift", Label("AWS"), func() {
 
 		env.ExpectCreatedOrUpdated(updatedNodePool)
 
-		By("validating the drifted status condition has propagated")
-		Eventually(func(g Gomega) {
-			g.Expect(env.Client.Get(env, client.ObjectKeyFromObject(nodeClaim), nodeClaim)).To(Succeed())
-			g.Expect(nodeClaim.StatusConditions().GetCondition(corev1beta1.Drifted)).ToNot(BeNil())
-			g.Expect(nodeClaim.StatusConditions().GetCondition(corev1beta1.Drifted).IsTrue()).To(BeTrue())
-		}).Should(Succeed())
+		env.EventuallyExpectDrifted(nodeClaim)
 
 		delete(pod.Annotations, corev1beta1.DoNotDisruptAnnotationKey)
 		env.ExpectUpdated(pod)
@@ -385,12 +679,7 @@ var _ = Describe("Drift", Label("AWS"), func() {
 
 		env.ExpectCreatedOrUpdated(updatedNodeClass)
 
-		By("validating the drifted status condition has propagated")
-		Eventually(func(g Gomega) {
-			g.Expect(env.Client.Get(env, client.ObjectKeyFromObject(nodeClaim), nodeClaim)).To(Succeed())
-			g.Expect(nodeClaim.StatusConditions().GetCondition(corev1beta1.Drifted)).ToNot(BeNil())
-			g.Expect(nodeClaim.StatusConditions().GetCondition(corev1beta1.Drifted).IsTrue()).To(BeTrue())
-		}).Should(Succeed())
+		env.EventuallyExpectDrifted(nodeClaim)
 
 		delete(pod.Annotations, corev1beta1.DoNotDisruptAnnotationKey)
 		env.ExpectUpdated(pod)
@@ -436,12 +725,7 @@ var _ = Describe("Drift", Label("AWS"), func() {
 		nodeClass.Spec.InstanceProfile = lo.ToPtr(instanceProfileDriftName)
 		env.ExpectCreatedOrUpdated(nodeClass)
 
-		By("validating the drifted status condition has propagated")
-		Eventually(func(g Gomega) {
-			g.Expect(env.Client.Get(env, client.ObjectKeyFromObject(nodeClaim), nodeClaim)).To(Succeed())
-			g.Expect(nodeClaim.StatusConditions().GetCondition(corev1beta1.Drifted)).ToNot(BeNil())
-			g.Expect(nodeClaim.StatusConditions().GetCondition(corev1beta1.Drifted).IsTrue()).To(BeTrue())
-		}).Should(Succeed())
+		env.EventuallyExpectDrifted(nodeClaim)
 
 		delete(pod.Annotations, corev1beta1.DoNotDisruptAnnotationKey)
 		env.ExpectUpdated(pod)
@@ -469,21 +753,15 @@ var _ = Describe("Drift", Label("AWS"), func() {
 			startingNodeClaimState := env.EventuallyExpectCreatedNodeClaimCount("==", int(numPods))
 			env.EventuallyExpectCreatedNodeCount("==", int(numPods))
 
-			// Drift the nodeClaim with bad configuration
+			// Drift the nodeClaim with bad configuration that will not register a NodeClaim
 			parameter, err := env.SSMAPI.GetParameter(&ssm.GetParameterInput{
-				Name: awssdk.String("/aws/service/ami-amazon-linux-latest/amzn-ami-hvm-x86_64-ebs"),
+				Name: awssdk.String("/aws/service/ami-amazon-linux-latest/amzn2-ami-hvm-x86_64-ebs"),
 			})
 			Expect(err).ToNot(HaveOccurred())
 			nodeClass.Spec.AMISelectorTerms = []v1beta1.AMISelectorTerm{{ID: *parameter.Parameter.Value}}
 			env.ExpectCreatedOrUpdated(nodeClass)
 
-			// Should see the nodeClaim has drifted
-			Eventually(func(g Gomega) {
-				for _, nodeClaim := range startingNodeClaimState {
-					g.Expect(env.Client.Get(env, client.ObjectKeyFromObject(nodeClaim), nodeClaim)).To(Succeed())
-					g.Expect(nodeClaim.StatusConditions().GetCondition(corev1beta1.Drifted).IsTrue()).To(BeTrue())
-				}
-			}).Should(Succeed())
+			env.EventuallyExpectDrifted(startingNodeClaimState...)
 
 			// Expect nodes To get tainted
 			taintedNodes := env.EventuallyExpectTaintedNodeCount("==", 1)
@@ -533,13 +811,7 @@ var _ = Describe("Drift", Label("AWS"), func() {
 			nodePool.Spec.Template.Spec.StartupTaints = []v1.Taint{{Key: "example.com/taint", Effect: v1.TaintEffectPreferNoSchedule}}
 			env.ExpectCreatedOrUpdated(nodePool)
 
-			// Should see the nodeClaim has drifted
-			Eventually(func(g Gomega) {
-				for _, nodeClaim := range startingNodeClaimState {
-					g.Expect(env.Client.Get(env, client.ObjectKeyFromObject(nodeClaim), nodeClaim)).To(Succeed())
-					g.Expect(nodeClaim.StatusConditions().GetCondition(corev1beta1.Drifted).IsTrue()).To(BeTrue())
-				}
-			}).Should(Succeed())
+			env.EventuallyExpectDrifted(startingNodeClaimState...)
 
 			// Expect nodes to be tainted
 			taintedNodes := env.EventuallyExpectTaintedNodeCount("==", 1)
@@ -566,6 +838,51 @@ var _ = Describe("Drift", Label("AWS"), func() {
 				nodeClaimUIDs := lo.Map(nodeClaims.Items, func(m corev1beta1.NodeClaim, _ int) types.UID { return m.UID })
 				g.Expect(sets.New(nodeClaimUIDs...).IsSuperset(sets.New(startingNodeClaimUIDs...))).To(BeTrue())
 			}, "2m").Should(Succeed())
+		})
+		It("should not drift any nodes if their PodDisruptionBudgets are unhealthy", func() {
+			// Create a deployment that contains a readiness probe that will never succeed
+			// This way, the pod will bind to the node, but the PodDisruptionBudget will never go healthy
+			var numPods int32 = 2
+			dep := coretest.Deployment(coretest.DeploymentOptions{
+				Replicas: 2,
+				PodOptions: coretest.PodOptions{
+					ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": "inflate"}},
+					PodAntiRequirements: []v1.PodAffinityTerm{{
+						TopologyKey: v1.LabelHostname,
+						LabelSelector: &metav1.LabelSelector{
+							MatchLabels: map[string]string{"app": "inflate"},
+						}},
+					},
+
+					ReadinessProbe: &v1.Probe{
+						ProbeHandler: v1.ProbeHandler{
+							HTTPGet: &v1.HTTPGetAction{
+								Port: intstr.FromInt32(80),
+							},
+						},
+					},
+				},
+			})
+			selector := labels.SelectorFromSet(dep.Spec.Selector.MatchLabels)
+			minAvailable := intstr.FromInt32(numPods - 1)
+			pdb := coretest.PodDisruptionBudget(coretest.PDBOptions{
+				Labels:       dep.Spec.Template.Labels,
+				MinAvailable: &minAvailable,
+			})
+			env.ExpectCreated(dep, nodeClass, nodePool, pdb)
+
+			nodeClaims := env.EventuallyExpectCreatedNodeClaimCount("==", int(numPods))
+			env.EventuallyExpectCreatedNodeCount("==", int(numPods))
+
+			// Expect pods to be bound but not to be ready since we are intentionally failing the readiness check
+			env.EventuallyExpectBoundPodCount(selector, int(numPods))
+
+			// Drift the nodeclaims
+			nodePool.Spec.Template.Annotations = map[string]string{"test": "annotation"}
+			env.ExpectUpdated(nodePool)
+
+			env.EventuallyExpectDrifted(nodeClaims...)
+			env.ConsistentlyExpectNoDisruptions(int(numPods), "1m")
 		})
 	})
 })

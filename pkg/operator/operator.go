@@ -41,6 +41,7 @@ import (
 	"github.com/aws/aws-sdk-go/service/iam"
 	"github.com/aws/aws-sdk-go/service/ssm"
 	"github.com/patrickmn/go-cache"
+<<<<<<< HEAD
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 >>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
@@ -99,13 +100,39 @@ const (
 	"github.com/aws/karpenter/pkg/providers/securitygroup"
 	"github.com/aws/karpenter/pkg/providers/subnet"
 	"github.com/aws/karpenter/pkg/providers/version"
+=======
+	"github.com/samber/lo"
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/transport"
+	"knative.dev/pkg/logging"
+	"knative.dev/pkg/ptr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	corev1beta1 "sigs.k8s.io/karpenter/pkg/apis/v1beta1"
+	"sigs.k8s.io/karpenter/pkg/operator"
+	"sigs.k8s.io/karpenter/pkg/operator/scheme"
+
+	"github.com/aws/karpenter-provider-aws/pkg/apis"
+	awscache "github.com/aws/karpenter-provider-aws/pkg/cache"
+	"github.com/aws/karpenter-provider-aws/pkg/operator/options"
+	"github.com/aws/karpenter-provider-aws/pkg/providers/amifamily"
+	"github.com/aws/karpenter-provider-aws/pkg/providers/instance"
+	"github.com/aws/karpenter-provider-aws/pkg/providers/instanceprofile"
+	"github.com/aws/karpenter-provider-aws/pkg/providers/instancetype"
+	"github.com/aws/karpenter-provider-aws/pkg/providers/launchtemplate"
+	"github.com/aws/karpenter-provider-aws/pkg/providers/pricing"
+	"github.com/aws/karpenter-provider-aws/pkg/providers/securitygroup"
+	"github.com/aws/karpenter-provider-aws/pkg/providers/subnet"
+	"github.com/aws/karpenter-provider-aws/pkg/providers/version"
+>>>>>>> 6ebba50ce424ccd5e33b3c84b4f10a8e78d54539
 )
 
 func init() {
 	lo.Must0(apis.AddToScheme(scheme.Scheme))
-	v1alpha5.NormalizedLabels = lo.Assign(v1alpha5.NormalizedLabels, map[string]string{"topology.ebs.csi.aws.com/zone": corev1.LabelTopologyZone})
 	corev1beta1.NormalizedLabels = lo.Assign(corev1beta1.NormalizedLabels, map[string]string{"topology.ebs.csi.aws.com/zone": corev1.LabelTopologyZone})
-	coreapis.Settings = append(coreapis.Settings, apis.Settings...)
 }
 
 // Operator is injected into the AWS CloudProvider's factories
@@ -179,7 +206,35 @@ func NewOperator() (context.Context, *Operator) {
 	ctx = knativelogging.WithLogger(ctx, logger)
 	logging.ConfigureGlobalLoggers(ctx)
 
+<<<<<<< HEAD
 	knativelogging.FromContext(ctx).With("version", Version).Debugf("discovered karpenter version")
+=======
+	if *sess.Config.Region == "" {
+		logging.FromContext(ctx).Debug("retrieving region from IMDS")
+		region, err := ec2metadata.New(sess).Region()
+		*sess.Config.Region = lo.Must(region, err, "failed to get region from metadata server")
+	}
+	ec2api := ec2.New(sess)
+	if err := checkEC2Connectivity(ctx, ec2api); err != nil {
+		logging.FromContext(ctx).Fatalf("Checking EC2 API connectivity, %s", err)
+	}
+	logging.FromContext(ctx).With("region", *sess.Config.Region).Debugf("discovered region")
+	clusterEndpoint, err := ResolveClusterEndpoint(ctx, eks.New(sess))
+	if err != nil {
+		logging.FromContext(ctx).Fatalf("unable to detect the cluster endpoint, %s", err)
+	} else {
+		logging.FromContext(ctx).With("cluster-endpoint", clusterEndpoint).Debugf("discovered cluster endpoint")
+	}
+	// We perform best-effort on resolving the kube-dns IP
+	kubeDNSIP, err := kubeDNSIP(ctx, operator.KubernetesInterface)
+	if err != nil {
+		// If we fail to get the kube-dns IP, we don't want to crash because this causes issues with custom DNS setups
+		// https://github.com/aws/karpenter-provider-aws/issues/2787
+		logging.FromContext(ctx).Debugf("unable to detect the IP of the kube-dns service, %s", err)
+	} else {
+		logging.FromContext(ctx).With("kube-dns-ip", kubeDNSIP).Debugf("discovered kube dns")
+	}
+>>>>>>> 6ebba50ce424ccd5e33b3c84b4f10a8e78d54539
 
 	// Manager
 	mgrOpts := controllerruntime.Options{

@@ -1,0 +1,53 @@
+{
+  "IamInstanceProfile": {
+    "Name": "KarpenterNodeInstanceProfile-george-karpenter-demo"
+  },
+  "BlockDeviceMappings": [
+    {
+      "DeviceName": "/dev/xvda",
+      "Ebs": {
+        "Encrypted": true,
+        "VolumeSize": 20,
+        "VolumeType": "gp3"
+      }
+    }
+  ],
+  "ImageId": "ami-08863056f2ff03fad",
+  "Monitoring": {
+    "Enabled": false
+  },
+  "UserData": "TUlNRS1WZXJzaW9uOiAxLjAKQ29udGVudC1UeXBlOiBtdWx0aXBhcnQvbWl4ZWQ7IGJvdW5kYXJ5PSIvLyIKCi0tLy8KQ29udGVudC1UeXBlOiB0ZXh0L3gtc2hlbGxzY3JpcHQ7IGNoYXJzZXQ9InVzLWFzY2lpIgoKIyEvYmluL2Jhc2ggLXhlCmV4ZWMgPiA+KHRlZSAvdmFyL2xvZy91c2VyLWRhdGEubG9nfGxvZ2dlciAtdCB1c2VyLWRhdGEgLXMgMj4vZGV2L2NvbnNvbGUpIDI+JjEKL2V0Yy9la3MvYm9vdHN0cmFwLnNoICdnZW9yZ2Uta2FycGVudGVyLWRlbW8nIC0tYXBpc2VydmVyLWVuZHBvaW50ICdodHRwczovL0JDQjUxMTRFMTBFM0UyNEM3RjhDMkVGMTBERDRFNTQ1LnlsNC5ldS13ZXN0LTEuZWtzLmFtYXpvbmF3cy5jb20nIC0tYjY0LWNsdXN0ZXItY2EgJ0xTMHRMUzFDUlVkSlRpQkRSVkpVU1VaSlEwRlVSUzB0TFMwdENrMUpTVVJDVkVORFFXVXlaMEYzU1VKQlowbEpWbVZRVVd4SlVWaFRURzkzUkZGWlNrdHZXa2xvZG1OT1FWRkZURUpSUVhkR1ZFVlVUVUpGUjBFeFZVVUtRWGhOUzJFelZtbGFXRXAxV2xoU2JHTjZRV1ZHZHpCNVRYcEJOVTFVYTNoT2VrMHlUWHBXWVVaM01IcE5la0UxVFZSWmVFNTZUVEpOZWxaaFRVSlZlQXBGZWtGU1FtZE9Wa0pCVFZSRGJYUXhXVzFXZVdKdFZqQmFXRTEzWjJkRmFVMUJNRWREVTNGSFUwbGlNMFJSUlVKQlVWVkJRVFJKUWtSM1FYZG5aMFZMQ2tGdlNVSkJVVU52UW5kVVkwNUxXa2RKVjBkWGEzcHNOVGQ2ZGpsMFVYSllXVFJoVDNsR2VuQjNObFZUYW1GTmRIcHpjamx5TVVSQ0wycFRTV3hpU0dRS1FVVXpTbGx0VWxsT2R6ZDJRWGh4ZFVaU1NFMDBiVmRZYW1OT2FFYzRkbmt6V2xKRVJWZEhTbEl6VjJ4cE1rbzNjVzlpYUdKdGQwRTBMM1ZOYW1KaFJBcGtUbGwxWjBWemRHRjRiSHA1TkdwalQzWlFTVGxqWmtKWVEwNWxOalJQVEVvMGFVaEpTRkJhV1RrdlJURjRkM1J2T0ROMlZ6Y3lkMnBCTUVSVFREUnJDbE42Um1kVVZFMVVXbHBKWjNCcVUyOHhaVVZFY3l0SmJuTTBTMkpKVkZaWmRYazJhSGxhWmt4Mk4weEdRbFIzVUVSUVlVSnhSR1ZaUVU5MGJYSTFTbk1LZWpSNmNTODFaRlU0YUhwRmFsUjRVWEZDVEM5dlZXMVpXRFJJVFhwQ2EzZDFXRFJ3WVdFMVVIYzJiRFZwVjFCYVlUWnBNR1F6T1N0RlpuUTBibkpWZEFwYUszbEpkbko1TjNOR016ZFNkWFJoVUVWdlYyMUxWMngzTDBsYVFXZE5Ra0ZCUjJwWFZFSllUVUUwUjBFeFZXUkVkMFZDTDNkUlJVRjNTVU53UkVGUUNrSm5UbFpJVWsxQ1FXWTRSVUpVUVVSQlVVZ3ZUVUl3UjBFeFZXUkVaMUZYUWtKUmR6TjJhVXRQZWpCNE5rdDFWWFYwTDBWcWFqTlpXRkZqYlRWVVFWWUtRbWRPVmtoU1JVVkVha0ZOWjJkd2NtUlhTbXhqYlRWc1pFZFdlazFCTUVkRFUzRkhVMGxpTTBSUlJVSkRkMVZCUVRSSlFrRlJRVzV6YjA5cmVFTnNXQXB2VFVaRVNucDNWa3hwUWtkUkwyOUlURlIzZUZkVVlsaHpWVEpYUkZOSU9EWktNRTlyYUZSMEt6TmpNM0ZrVkdaUE0yY3plbmQ2Y2tVME5tSkZRVUpZQ21jeEwzVlNaV3RyVHpGb1R6aDNNWGhITDFGMVFtZGtRemswUlRJMldtMW5aMFI2UXpab1VGTjRZWHBSWWt4cWFHdElUazk2TlhKUVptbHVjVnB3YzNvS00yUjJhVlJtY2pCeVduSlZRVFY0TWs1a2MyVnBXWFJMVmxsdlpGWktSekF6VkhsdFNVazJaVGQ0Y0dWeFVEUmpZM2xuUTJwU1lYRkVVM0V3S3prck5BcExXVkpaZFRGdk5VaGhNVTVHVm0xbWFsaE5PVWhKVVhkc1FVdElTbVZPZVdwb0x6aGpkMnN6VmtjdlpFRkVSak5ZVkVOUmNsSmhOM2hqTTNWR2FHSnVDbWtyY21sR1FVcFNOVUZHYmtKS1NsWndiMFl6VW14bFFYUlViMVpCZG5wblNFeFBjMllyZUhsWFRFZHNhVGhPZVRsUE1VdHVMMkZVT0c4cmRHaHRUV3NLVFRjM1VuWnJWV3hLUm1STkNpMHRMUzB0UlU1RUlFTkZVbFJKUmtsRFFWUkZMUzB0TFMwSycgXAotLWNvbnRhaW5lci1ydW50aW1lIGNvbnRhaW5lcmQgXAotLWRucy1jbHVzdGVyLWlwICcxMC4xMDAuMC4xMCcgXAotLXVzZS1tYXgtcG9kcyBmYWxzZSBcCi0ta3ViZWxldC1leHRyYS1hcmdzICctLW5vZGUtbGFiZWxzPSJrYXJwZW50ZXIuc2gvY2FwYWNpdHktdHlwZT1zcG90LGthcnBlbnRlci5zaC9wcm92aXNpb25lci1uYW1lPWRlZmF1bHQiIC0tbWF4LXBvZHM9NTgnCi0tLy8tLQo=",
+  "TagSpecifications": [
+    {
+      "ResourceType": "network-interface",
+      "Tags": [
+        {
+          "Key": "karpenter.sh/provisioner-name",
+          "Value": "default"
+        },
+        {
+          "Key": "karpenter.sh/managed-by",
+          "Value": "george-karpenter-demo"
+        },
+        {
+          "Key": "Name",
+          "Value": "karpenter.sh/provisioner-name/default"
+        },
+        {
+          "Key": "kubernetes.io/cluster/george-karpenter-demo",
+          "Value": "owned"
+        }
+      ]
+    }
+  ],
+  "SecurityGroupIds": [
+    "sg-013513dc2027d3c4d",
+    "sg-03267a74b2faea607"
+  ],
+  "MetadataOptions": {
+    "HttpTokens": "required",
+    "HttpPutResponseHopLimit": 2,
+    "HttpEndpoint": "enabled",
+    "HttpProtocolIpv6": "disabled"
+  }
+}

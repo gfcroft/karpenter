@@ -57,7 +57,11 @@ linters-settings:
     locale: US
     ignore-words: []
   goimports:
+<<<<<<< HEAD
     local-prefixes: github.com/aws/karpenter-core
+=======
+    local-prefixes: github.com/aws/karpenter-provider-aws
+>>>>>>> 6ebba50ce424ccd5e33b3c84b4f10a8e78d54539
   goheader:
     template: |-
       Licensed under the Apache License, Version 2.0 (the "License");

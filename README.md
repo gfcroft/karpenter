@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 [![Build Status](https://img.shields.io/github/actions/workflow/status/aws/karpenter-core/presubmit.yaml?branch=main)](https://github.com/aws/karpenter-core/actions/workflows/presubmit.yaml)
 ![GitHub stars](https://img.shields.io/github/stars/aws/karpenter-core)
 ![GitHub forks](https://img.shields.io/github/forks/aws/karpenter-core)
@@ -5,6 +6,15 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/aws/karpenter-core)](https://goreportcard.com/report/github.com/aws/karpenter-core)
 [![Coverage Status](https://coveralls.io/repos/github/aws/karpenter-core/badge.svg?branch=main)](https://coveralls.io/github/aws/karpenter-core?branch=main)
 [![contributions welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat)](https://github.com/aws/karpenter-core/issues)
+=======
+[![CI](https://github.com/aws/karpenter-provider-aws/actions/workflows/ci.yaml/badge.svg?branch=main)](https://github.com/aws/karpenter/actions/workflows/ci.yaml)
+![GitHub stars](https://img.shields.io/github/stars/aws/karpenter-provider-aws)
+![GitHub forks](https://img.shields.io/github/forks/aws/karpenter-provider-aws)
+[![GitHub License](https://img.shields.io/badge/License-Apache%202.0-ff69b4.svg)](https://github.com/aws/karpenter-provider-aws/blob/main/LICENSE)
+[![Go Report Card](https://goreportcard.com/badge/github.com/aws/karpenter-provider-aws)](https://goreportcard.com/report/github.com/aws/karpenter)
+[![Coverage Status](https://coveralls.io/repos/github/aws/karpenter-provider-aws/badge.svg?branch=main)](https://coveralls.io/github/aws/karpenter?branch=main)
+[![contributions welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg?style=flat)](https://github.com/aws/karpenter-provider-aws/issues)
+>>>>>>> 6ebba50ce424ccd5e33b3c84b4f10a8e78d54539
 
 # Karpenter
 

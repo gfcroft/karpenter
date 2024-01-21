@@ -20,6 +20,11 @@ import (
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
+<<<<<<< HEAD
+=======
+
+	"sigs.k8s.io/karpenter/pkg/apis/v1beta1"
+>>>>>>> 6ebba50ce424ccd5e33b3c84b4f10a8e78d54539
 )
 
 <<<<<<< HEAD
@@ -139,8 +144,6 @@ var (
 		// Adheres to cluster name pattern matching as specified in the API spec
 		// https://docs.aws.amazon.com/eks/latest/APIReference/API_CreateCluster.html
 		regexp.MustCompile(`^kubernetes\.io/cluster/[0-9A-Za-z][A-Za-z0-9\-_]*$`),
-		regexp.MustCompile(fmt.Sprintf("^%s$", regexp.QuoteMeta(v1alpha5.ProvisionerNameLabelKey))),
-		regexp.MustCompile(fmt.Sprintf("^%s$", regexp.QuoteMeta(v1alpha5.MachineManagedByAnnotationKey))),
 		regexp.MustCompile(fmt.Sprintf("^%s$", regexp.QuoteMeta(v1beta1.NodePoolLabelKey))),
 		regexp.MustCompile(fmt.Sprintf("^%s$", regexp.QuoteMeta(v1beta1.ManagedByAnnotationKey))),
 	}
@@ -161,6 +164,7 @@ var (
 	ResourceHabanaGaudi        v1.ResourceName = "habana.ai/gaudi"
 	ResourceAWSPodENI          v1.ResourceName = "vpc.amazonaws.com/pod-eni"
 	ResourcePrivateIPv4Address v1.ResourceName = "vpc.amazonaws.com/PrivateIPv4Address"
+	ResourceEFA                v1.ResourceName = "vpc.amazonaws.com/efa"
 
 	LabelNodeClass = Group + "/ec2nodeclass"
 
@@ -181,7 +185,7 @@ var (
 	LabelInstanceAcceleratorName              = Group + "/instance-accelerator-name"
 	LabelInstanceAcceleratorManufacturer      = Group + "/instance-accelerator-manufacturer"
 	LabelInstanceAcceleratorCount             = Group + "/instance-accelerator-count"
-	AnnotationNodeClassHash                   = Group + "/ec2nodeclass-hash"
+	AnnotationEC2NodeClassHash                = Group + "/ec2nodeclass-hash"
 	AnnotationInstanceTagged                  = Group + "/tagged"
 >>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
 )
