@@ -16,26 +16,14 @@ package v1beta1
 
 import (
 	"fmt"
-	"strings"
+	"regexp"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
-<<<<<<< HEAD
-=======
 
 	"sigs.k8s.io/karpenter/pkg/apis/v1beta1"
->>>>>>> 6ebba50ce424ccd5e33b3c84b4f10a8e78d54539
 )
 
-<<<<<<< HEAD
-// Well known labels and resources
-const (
-	ArchitectureAmd64    = "amd64"
-	ArchitectureArm64    = "arm64"
-	CapacityTypeSpot     = "spot"
-	CapacityTypeOnDemand = "on-demand"
-)
-=======
 func init() {
 	v1beta1.RestrictedLabelDomains = v1beta1.RestrictedLabelDomains.Insert(RestrictedLabelDomains...)
 	v1beta1.WellKnownLabels = v1beta1.WellKnownLabels.Insert(
@@ -59,76 +47,12 @@ func init() {
 		v1.LabelWindowsBuild,
 	)
 }
->>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
 
-// Karpenter specific domains and labels
-const (
-	NodePoolLabelKey        = Group + "/nodepool"
-	NodeInitializedLabelKey = Group + "/initialized"
-	NodeRegisteredLabelKey  = Group + "/registered"
-	CapacityTypeLabelKey    = Group + "/capacity-type"
-)
-
-// Karpenter specific annotations
-const (
-	DoNotDisruptAnnotationKey          = Group + "/do-not-disrupt"
-	ProviderCompatabilityAnnotationKey = CompatabilityGroup + "/provider"
-	ManagedByAnnotationKey             = Group + "/managed-by"
-	NodePoolHashAnnotationKey          = Group + "/nodepool-hash"
-)
-
-// Karpenter specific finalizers
 const (
 	TerminationFinalizer = Group + "/termination"
 )
 
 var (
-<<<<<<< HEAD
-	// RestrictedLabelDomains are either prohibited by the kubelet or reserved by karpenter
-	RestrictedLabelDomains = sets.New(
-		"kubernetes.io",
-		"k8s.io",
-		Group,
-	)
-
-	// LabelDomainExceptions are sub-domains of the RestrictedLabelDomains but allowed because
-	// they are not used in a context where they may be passed as argument to kubelet.
-	LabelDomainExceptions = sets.New(
-		"kops.k8s.io",
-		v1.LabelNamespaceSuffixNode,
-		v1.LabelNamespaceNodeRestriction,
-	)
-
-	// WellKnownLabels are labels that belong to the RestrictedLabelDomains but allowed.
-	// Karpenter is aware of these labels, and they can be used to further narrow down
-	// the range of the corresponding values by either provisioner or pods.
-	WellKnownLabels = sets.New(
-		NodePoolLabelKey,
-		v1.LabelTopologyZone,
-		v1.LabelTopologyRegion,
-		v1.LabelInstanceTypeStable,
-		v1.LabelArchStable,
-		v1.LabelOSStable,
-		CapacityTypeLabelKey,
-		v1.LabelWindowsBuild,
-	)
-
-	// RestrictedLabels are labels that should not be used
-	// because they may interfere with the internal provisioning logic.
-	RestrictedLabels = sets.New(
-		v1.LabelHostname,
-	)
-
-	// NormalizedLabels translate aliased concepts into the controller's
-	// WellKnownLabels. Pod requirements are translated for compatibility.
-	NormalizedLabels = map[string]string{
-		v1.LabelFailureDomainBetaZone:   v1.LabelTopologyZone,
-		"beta.kubernetes.io/arch":       v1.LabelArchStable,
-		"beta.kubernetes.io/os":         v1.LabelOSStable,
-		v1.LabelInstanceType:            v1.LabelInstanceTypeStable,
-		v1.LabelFailureDomainBetaRegion: v1.LabelTopologyRegion,
-	}
-=======
 	AWSToKubeArchitectures = map[string]string{
 		"x86_64":                  v1beta1.ArchitectureAmd64,
 		v1beta1.ArchitectureArm64: v1beta1.ArchitectureArm64,
@@ -187,44 +111,4 @@ var (
 	LabelInstanceAcceleratorCount             = Group + "/instance-accelerator-count"
 	AnnotationEC2NodeClassHash                = Group + "/ec2nodeclass-hash"
 	AnnotationInstanceTagged                  = Group + "/tagged"
->>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
 )
-
-// IsRestrictedLabel returns an error if the label is restricted.
-func IsRestrictedLabel(key string) error {
-	if WellKnownLabels.Has(key) {
-		return nil
-	}
-	if IsRestrictedNodeLabel(key) {
-		return fmt.Errorf("label %s is restricted; specify a well known label: %v, or a custom label that does not use a restricted domain: %v", key, sets.List(WellKnownLabels), sets.List(RestrictedLabelDomains))
-	}
-	return nil
-}
-
-// IsRestrictedNodeLabel returns true if a node label should not be injected by Karpenter.
-// They are either known labels that will be injected by cloud providers,
-// or label domain managed by other software (e.g., kops.k8s.io managed by kOps).
-func IsRestrictedNodeLabel(key string) bool {
-	if WellKnownLabels.Has(key) {
-		return true
-	}
-	labelDomain := GetLabelDomain(key)
-	for exceptionLabelDomain := range LabelDomainExceptions {
-		if strings.HasSuffix(labelDomain, exceptionLabelDomain) {
-			return false
-		}
-	}
-	for restrictedLabelDomain := range RestrictedLabelDomains {
-		if strings.HasSuffix(labelDomain, restrictedLabelDomain) {
-			return true
-		}
-	}
-	return RestrictedLabels.Has(key)
-}
-
-func GetLabelDomain(key string) string {
-	if parts := strings.SplitN(key, "/", 2); len(parts) == 2 {
-		return parts[0]
-	}
-	return ""
-}

@@ -102,20 +102,12 @@ func NewProvider(ctx context.Context, cache *cache.Cache, ec2api ec2iface.EC2API
 }
 
 func (p *Provider) EnsureAll(ctx context.Context, nodeClass *v1beta1.EC2NodeClass, nodeClaim *corev1beta1.NodeClaim,
-<<<<<<< HEAD
-	instanceTypes []*cloudprovider.InstanceType, additionalLabels map[string]string, tags map[string]string) ([]*LaunchTemplate, error) {
-=======
 	instanceTypes []*cloudprovider.InstanceType, capacityType string, tags map[string]string) ([]*LaunchTemplate, error) {
->>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
 
 	p.Lock()
 	defer p.Unlock()
 
-<<<<<<< HEAD
-	options, err := p.createAMIOptions(ctx, nodeClass, lo.Assign(nodeClaim.Labels, additionalLabels), tags)
-=======
 	options, err := p.createAMIOptions(ctx, nodeClass, lo.Assign(nodeClaim.Labels, map[string]string{corev1beta1.CapacityTypeLabelKey: capacityType}), tags)
->>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
 	if err != nil {
 		return nil, err
 	}

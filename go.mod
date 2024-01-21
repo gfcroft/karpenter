@@ -1,59 +1,18 @@
-<<<<<<< HEAD
-module github.com/aws/karpenter-core
-=======
 module github.com/aws/karpenter-provider-aws
->>>>>>> 6ebba50ce424ccd5e33b3c84b4f10a8e78d54539
 
 go 1.21
 
 require (
 	github.com/Pallinder/go-randomdata v1.2.0
-<<<<<<< HEAD
-	github.com/avast/retry-go v3.0.0+incompatible
-<<<<<<< HEAD
-	github.com/deckarep/golang-set v1.8.0
-	github.com/go-logr/logr v1.3.0
-=======
-	github.com/aws/aws-sdk-go v1.48.0
-	github.com/aws/karpenter-core v0.32.2-0.20231122223643-d0156e68fd30
-	github.com/aws/karpenter/tools/kompat v0.0.0-20231010173459-62c25a3ea85c
->>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
-=======
 	github.com/PuerkitoBio/goquery v1.8.1
 	github.com/aws/aws-sdk-go v1.49.21
 	github.com/aws/karpenter-provider-aws/tools/kompat v0.0.0-20231207011214-752356948623
->>>>>>> 6ebba50ce424ccd5e33b3c84b4f10a8e78d54539
 	github.com/go-logr/zapr v1.3.0
 	github.com/imdario/mergo v0.3.16
 	github.com/mitchellh/hashstructure/v2 v2.0.2
 	github.com/onsi/ginkgo/v2 v2.14.0
 	github.com/onsi/gomega v1.30.0
 	github.com/patrickmn/go-cache v2.1.0+incompatible
-<<<<<<< HEAD
-	github.com/prometheus/client_golang v1.17.0
-	github.com/prometheus/client_model v0.5.0
-	github.com/samber/lo v1.38.1
-	go.uber.org/multierr v1.11.0
-	go.uber.org/zap v1.26.0
-	golang.org/x/sync v0.5.0
-<<<<<<< HEAD
-	golang.org/x/text v0.14.0
-=======
->>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
-	golang.org/x/time v0.4.0
-	k8s.io/api v0.28.4
-	k8s.io/apiextensions-apiserver v0.28.4
-	k8s.io/apimachinery v0.28.4
-	k8s.io/client-go v0.28.4
-<<<<<<< HEAD
-	k8s.io/cloud-provider v0.28.4
-	k8s.io/component-base v0.28.4
-	k8s.io/csi-translation-lib v0.28.4
-	k8s.io/klog/v2 v2.110.1
-	k8s.io/utils v0.0.0-20230406110748-d93618cff8a2
-	knative.dev/pkg v0.0.0-20230712131115-7051d301e7f4
-=======
-=======
 	github.com/pelletier/go-toml/v2 v2.1.1
 	github.com/prometheus/client_golang v1.18.0
 	github.com/samber/lo v1.39.0
@@ -65,43 +24,24 @@ require (
 	k8s.io/apiextensions-apiserver v0.29.0
 	k8s.io/apimachinery v0.29.0
 	k8s.io/client-go v0.29.0
->>>>>>> 6ebba50ce424ccd5e33b3c84b4f10a8e78d54539
 	k8s.io/utils v0.0.0-20230726121419-3b25d923346b
 	knative.dev/pkg v0.0.0-20231010144348-ca8c009405dd
->>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
 	sigs.k8s.io/controller-runtime v0.16.3
 	sigs.k8s.io/karpenter v0.33.1-0.20240116233859-f19e1d8dfbfa
 )
 
 require (
 	contrib.go.opencensus.io/exporter/ocagent v0.7.1-0.20200907061046-05415f1de66d // indirect
-<<<<<<< HEAD
-	contrib.go.opencensus.io/exporter/prometheus v0.4.0 // indirect
-=======
 	contrib.go.opencensus.io/exporter/prometheus v0.4.2 // indirect
 	github.com/Masterminds/semver/v3 v3.2.1 // indirect
 	github.com/andybalholm/cascadia v1.3.2 // indirect
-<<<<<<< HEAD
->>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
-=======
 	github.com/avast/retry-go v3.0.0+incompatible // indirect
->>>>>>> 6ebba50ce424ccd5e33b3c84b4f10a8e78d54539
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/blang/semver/v4 v4.0.0 // indirect
 	github.com/blendle/zapdriver v1.3.1 // indirect
 	github.com/census-instrumentation/opencensus-proto v0.4.1 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
-<<<<<<< HEAD
-	github.com/emicklei/go-restful/v3 v3.11.0 // indirect
-	github.com/evanphx/json-patch/v5 v5.6.0 // indirect
-	github.com/fsnotify/fsnotify v1.6.0 // indirect
-	github.com/go-kit/log v0.2.1 // indirect
-	github.com/go-logfmt/logfmt v0.5.1 // indirect
-	github.com/go-openapi/jsonpointer v0.19.6 // indirect
-	github.com/go-openapi/jsonreference v0.20.2 // indirect
-	github.com/go-openapi/swag v0.22.3 // indirect
-=======
 	github.com/deckarep/golang-set v1.8.0 // indirect
 	github.com/emicklei/go-restful/v3 v3.11.0 // indirect
 	github.com/evanphx/json-patch v5.7.0+incompatible // indirect
@@ -113,7 +53,6 @@ require (
 	github.com/go-openapi/jsonpointer v0.20.0 // indirect
 	github.com/go-openapi/jsonreference v0.20.2 // indirect
 	github.com/go-openapi/swag v0.22.4 // indirect
->>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
 	github.com/go-task/slim-sprig v0.0.0-20230315185526-52ccab3ef572 // indirect
 	github.com/gobuffalo/flect v1.0.2 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
@@ -122,61 +61,24 @@ require (
 	github.com/google/gnostic-models v0.6.8 // indirect
 	github.com/google/go-cmp v0.6.0 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
-<<<<<<< HEAD
-	github.com/google/pprof v0.0.0-20210720184732-4bb14d4b1be1 // indirect
-	github.com/google/uuid v1.3.0 // indirect
-	github.com/grpc-ecosystem/grpc-gateway/v2 v2.11.3 // indirect
-	github.com/hashicorp/golang-lru v0.5.4 // indirect
-	github.com/inconshreveable/mousetrap v1.1.0 // indirect
-=======
 	github.com/google/pprof v0.0.0-20230926050212-f7f687d19a98 // indirect
 	github.com/google/uuid v1.3.1 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.18.0 // indirect
 	github.com/hashicorp/golang-lru v1.0.2 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
->>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/kelseyhightower/envconfig v1.4.0 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
-<<<<<<< HEAD
-=======
 	github.com/mattn/go-runewidth v0.0.15 // indirect
-<<<<<<< HEAD
->>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
-	github.com/matttproud/golang_protobuf_extensions v1.0.4 // indirect
-=======
 	github.com/matttproud/golang_protobuf_extensions/v2 v2.0.0 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
->>>>>>> 6ebba50ce424ccd5e33b3c84b4f10a8e78d54539
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
+	github.com/olekukonko/tablewriter v0.0.5 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
-<<<<<<< HEAD
-	github.com/prometheus/common v0.44.0 // indirect
-	github.com/prometheus/procfs v0.11.1 // indirect
-	github.com/prometheus/statsd_exporter v0.21.0 // indirect
-	github.com/spf13/cobra v1.7.0 // indirect
-	github.com/spf13/pflag v1.0.5 // indirect
-	go.opencensus.io v0.24.0 // indirect
-	go.uber.org/atomic v1.10.0 // indirect
-	go.uber.org/automaxprocs v1.4.0 // indirect
-	golang.org/x/exp v0.0.0-20220722155223-a9213eeb770e // indirect
-	golang.org/x/net v0.17.0 // indirect
-	golang.org/x/oauth2 v0.8.0 // indirect
-	golang.org/x/sys v0.14.0 // indirect
-	golang.org/x/term v0.13.0 // indirect
-	golang.org/x/tools v0.14.0 // indirect
-	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect
-	google.golang.org/api v0.124.0 // indirect
-	google.golang.org/appengine v1.6.7 // indirect
-	google.golang.org/genproto v0.0.0-20230526161137-0005af68ea54 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20230525234035-dd9d682886f9 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20230525234030-28d5490b6b19 // indirect
-	google.golang.org/grpc v1.56.3 // indirect
-=======
 	github.com/prometheus/client_model v0.5.0 // indirect
 	github.com/prometheus/common v0.45.0 // indirect
 	github.com/prometheus/procfs v0.12.0 // indirect
@@ -201,33 +103,16 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20231009173412-8bfb1ae86b6c // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20231009173412-8bfb1ae86b6c // indirect
 	google.golang.org/grpc v1.58.3 // indirect
->>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
 	google.golang.org/protobuf v1.31.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-<<<<<<< HEAD
-<<<<<<< HEAD
-	k8s.io/kube-openapi v0.0.0-20230717233707-2695361300d9 // indirect
-=======
-	k8s.io/cloud-provider v0.28.4 // indirect
-	k8s.io/component-base v0.28.4 // indirect
-	k8s.io/csi-translation-lib v0.28.4 // indirect
-	k8s.io/klog/v2 v2.110.1 // indirect
-=======
 	k8s.io/cloud-provider v0.29.0 // indirect
 	k8s.io/component-base v0.29.0 // indirect
 	k8s.io/csi-translation-lib v0.29.0 // indirect
 	k8s.io/klog/v2 v2.120.0 // indirect
->>>>>>> 6ebba50ce424ccd5e33b3c84b4f10a8e78d54539
 	k8s.io/kube-openapi v0.0.0-20231010175941-2dd684a91f00 // indirect
->>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
 	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.4.1 // indirect
 	sigs.k8s.io/yaml v1.3.0 // indirect
-)
-
-retract (
-	v0.100.101-test // accidentally published testing version
-	v0.27.7 // accidentally published incomplete patch release
 )

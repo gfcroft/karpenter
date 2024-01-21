@@ -16,27 +16,11 @@ package test
 
 import (
 	"context"
-	"log"
-	"os"
-	"strings"
+	"net"
 
 	"github.com/patrickmn/go-cache"
 	"github.com/samber/lo"
 	corev1 "k8s.io/api/core/v1"
-<<<<<<< HEAD
-	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/util/version"
-	"k8s.io/client-go/kubernetes"
-	"knative.dev/pkg/system"
-	"sigs.k8s.io/controller-runtime/pkg/cache"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/envtest"
-
-	"github.com/aws/karpenter-core/pkg/apis/v1beta1"
-	"github.com/aws/karpenter-core/pkg/utils/env"
-	"github.com/aws/karpenter-core/pkg/utils/functional"
-=======
 	"knative.dev/pkg/ptr"
 
 	corev1beta1 "sigs.k8s.io/karpenter/pkg/apis/v1beta1"
@@ -58,7 +42,6 @@ import (
 	coretest "sigs.k8s.io/karpenter/pkg/test"
 
 	crmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
->>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
 )
 
 func init() {
@@ -67,102 +50,137 @@ func init() {
 }
 
 type Environment struct {
-	envtest.Environment
+	// API
+	EC2API     *fake.EC2API
+	SSMAPI     *fake.SSMAPI
+	IAMAPI     *fake.IAMAPI
+	PricingAPI *fake.PricingAPI
 
-	Client              client.Client
-	KubernetesInterface kubernetes.Interface
-	Version             *version.Version
-	Done                chan struct{}
-	Cancel              context.CancelFunc
+	// Cache
+	EC2Cache                  *cache.Cache
+	KubernetesVersionCache    *cache.Cache
+	InstanceTypeCache         *cache.Cache
+	UnavailableOfferingsCache *awscache.UnavailableOfferings
+	LaunchTemplateCache       *cache.Cache
+	SubnetCache               *cache.Cache
+	SecurityGroupCache        *cache.Cache
+	InstanceProfileCache      *cache.Cache
+
+	// Providers
+	InstanceTypesProvider   *instancetype.Provider
+	InstanceProvider        *instance.Provider
+	SubnetProvider          *subnet.Provider
+	SecurityGroupProvider   *securitygroup.Provider
+	InstanceProfileProvider *instanceprofile.Provider
+	PricingProvider         *pricing.Provider
+	AMIProvider             *amifamily.Provider
+	AMIResolver             *amifamily.Resolver
+	VersionProvider         *version.Provider
+	LaunchTemplateProvider  *launchtemplate.Provider
 }
 
-type EnvironmentOptions struct {
-	crds          []*v1.CustomResourceDefinition
-	fieldIndexers []func(cache.Cache) error
-}
+func NewEnvironment(ctx context.Context, env *coretest.Environment) *Environment {
+	// API
+	ec2api := fake.NewEC2API()
+	ssmapi := fake.NewSSMAPI()
+	iamapi := fake.NewIAMAPI()
 
-// WithCRDs registers the specified CRDs to the apiserver for use in testing
-func WithCRDs(crds ...*v1.CustomResourceDefinition) functional.Option[EnvironmentOptions] {
-	return func(o EnvironmentOptions) EnvironmentOptions {
-		o.crds = append(o.crds, crds...)
-		return o
-	}
-}
+	// cache
+	ec2Cache := cache.New(awscache.DefaultTTL, awscache.DefaultCleanupInterval)
+	kubernetesVersionCache := cache.New(awscache.DefaultTTL, awscache.DefaultCleanupInterval)
+	instanceTypeCache := cache.New(awscache.DefaultTTL, awscache.DefaultCleanupInterval)
+	unavailableOfferingsCache := awscache.NewUnavailableOfferings()
+	launchTemplateCache := cache.New(awscache.DefaultTTL, awscache.DefaultCleanupInterval)
+	subnetCache := cache.New(awscache.DefaultTTL, awscache.DefaultCleanupInterval)
+	securityGroupCache := cache.New(awscache.DefaultTTL, awscache.DefaultCleanupInterval)
+	instanceProfileCache := cache.New(awscache.DefaultTTL, awscache.DefaultCleanupInterval)
+	fakePricingAPI := &fake.PricingAPI{}
 
-// WithFieldIndexers expects a function that indexes fields against the cache such as cache.IndexField(...)
-func WithFieldIndexers(fieldIndexers ...func(cache.Cache) error) functional.Option[EnvironmentOptions] {
-	return func(o EnvironmentOptions) EnvironmentOptions {
-		o.fieldIndexers = append(o.fieldIndexers, fieldIndexers...)
-		return o
-	}
-}
+	// Providers
+	pricingProvider := pricing.NewProvider(ctx, fakePricingAPI, ec2api, fake.DefaultRegion)
+	subnetProvider := subnet.NewProvider(ec2api, subnetCache)
+	securityGroupProvider := securitygroup.NewProvider(ec2api, securityGroupCache)
+	versionProvider := version.NewProvider(env.KubernetesInterface, kubernetesVersionCache)
+	instanceProfileProvider := instanceprofile.NewProvider(fake.DefaultRegion, iamapi, instanceProfileCache)
+	amiProvider := amifamily.NewProvider(versionProvider, ssmapi, ec2api, ec2Cache)
+	amiResolver := amifamily.New(amiProvider)
+	instanceTypesProvider := instancetype.NewProvider(fake.DefaultRegion, instanceTypeCache, ec2api, subnetProvider, unavailableOfferingsCache, pricingProvider)
+	launchTemplateProvider :=
+		launchtemplate.NewProvider(
+			ctx,
+			launchTemplateCache,
+			ec2api,
+			amiResolver,
+			securityGroupProvider,
+			subnetProvider,
+			instanceProfileProvider,
+			ptr.String("ca-bundle"),
+			make(chan struct{}),
+			net.ParseIP("10.0.100.10"),
+			"https://test-cluster",
+		)
+	instanceProvider :=
+		instance.NewProvider(ctx,
+			"",
+			ec2api,
+			unavailableOfferingsCache,
+			instanceTypesProvider,
+			subnetProvider,
+			launchTemplateProvider,
+		)
 
-func NodeClaimFieldIndexer(ctx context.Context) func(cache.Cache) error {
-	return func(c cache.Cache) error {
-		return c.IndexField(ctx, &v1beta1.NodeClaim{}, "status.providerID", func(obj client.Object) []string {
-			return []string{obj.(*v1beta1.NodeClaim).Status.ProviderID}
-		})
-	}
-}
-
-func NewEnvironment(scheme *runtime.Scheme, options ...functional.Option[EnvironmentOptions]) *Environment {
-	opts := functional.ResolveOptions(options...)
-	ctx, cancel := context.WithCancel(context.Background())
-
-	os.Setenv(system.NamespaceEnvKey, "default")
-	version := version.MustParseSemantic(strings.Replace(env.WithDefaultString("K8S_VERSION", "1.28.x"), ".x", ".0", -1))
-	environment := envtest.Environment{Scheme: scheme, CRDs: opts.crds}
-	if version.Minor() >= 21 {
-		// PodAffinityNamespaceSelector is used for label selectors in pod affinities.  If the feature-gate is turned off,
-		// the api-server just clears out the label selector so we never see it.  If we turn it on, the label selectors
-		// are passed to us and we handle them. This feature is alpha in v1.21, beta in v1.22 and will be GA in 1.24. See
-		// https://github.com/kubernetes/enhancements/issues/2249 for more info.
-		environment.ControlPlane.GetAPIServer().Configure().Set("feature-gates", "PodAffinityNamespaceSelector=true")
-	}
-	if version.Minor() >= 24 {
-		// MinDomainsInPodTopologySpread enforces a minimum number of eligible node domains for pod scheduling
-		// See https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/#spread-constraint-definition
-		// Ref: https://github.com/aws/karpenter-core/pull/330
-		environment.ControlPlane.GetAPIServer().Configure().Set("feature-gates", "MinDomainsInPodTopologySpread=true")
-	}
-
-	_ = lo.Must(environment.Start())
-
-	// We use a modified client if we need field indexers
-	var c client.Client
-	if len(opts.fieldIndexers) > 0 {
-		cache := lo.Must(cache.New(environment.Config, cache.Options{Scheme: scheme}))
-		for _, index := range opts.fieldIndexers {
-			lo.Must0(index(cache))
-		}
-		lo.Must0(cache.IndexField(ctx, &corev1.Pod{}, "spec.nodeName", func(o client.Object) []string {
-			pod := o.(*corev1.Pod)
-			return []string{pod.Spec.NodeName}
-		}))
-		c = &CacheSyncingClient{
-			Client: lo.Must(client.New(environment.Config, client.Options{Scheme: scheme, Cache: &client.CacheOptions{Reader: cache}})),
-		}
-		go func() {
-			lo.Must0(cache.Start(ctx))
-		}()
-		if !cache.WaitForCacheSync(ctx) {
-			log.Fatalf("cache failed to sync")
-		}
-	} else {
-		c = lo.Must(client.New(environment.Config, client.Options{Scheme: scheme}))
-	}
 	return &Environment{
-		Environment:         environment,
-		Client:              c,
-		KubernetesInterface: kubernetes.NewForConfigOrDie(environment.Config),
-		Version:             version,
-		Done:                make(chan struct{}),
-		Cancel:              cancel,
+		EC2API:     ec2api,
+		SSMAPI:     ssmapi,
+		IAMAPI:     iamapi,
+		PricingAPI: fakePricingAPI,
+
+		EC2Cache:                  ec2Cache,
+		KubernetesVersionCache:    kubernetesVersionCache,
+		InstanceTypeCache:         instanceTypeCache,
+		LaunchTemplateCache:       launchTemplateCache,
+		SubnetCache:               subnetCache,
+		SecurityGroupCache:        securityGroupCache,
+		InstanceProfileCache:      instanceProfileCache,
+		UnavailableOfferingsCache: unavailableOfferingsCache,
+
+		InstanceTypesProvider:   instanceTypesProvider,
+		InstanceProvider:        instanceProvider,
+		SubnetProvider:          subnetProvider,
+		SecurityGroupProvider:   securityGroupProvider,
+		LaunchTemplateProvider:  launchTemplateProvider,
+		InstanceProfileProvider: instanceProfileProvider,
+		PricingProvider:         pricingProvider,
+		AMIProvider:             amiProvider,
+		AMIResolver:             amiResolver,
+		VersionProvider:         versionProvider,
 	}
 }
 
-func (e *Environment) Stop() error {
-	close(e.Done)
-	e.Cancel()
-	return e.Environment.Stop()
+func (env *Environment) Reset() {
+	env.EC2API.Reset()
+	env.SSMAPI.Reset()
+	env.IAMAPI.Reset()
+	env.PricingAPI.Reset()
+	env.PricingProvider.Reset()
+
+	env.EC2Cache.Flush()
+	env.KubernetesVersionCache.Flush()
+	env.InstanceTypeCache.Flush()
+	env.UnavailableOfferingsCache.Flush()
+	env.LaunchTemplateCache.Flush()
+	env.SubnetCache.Flush()
+	env.SecurityGroupCache.Flush()
+	env.InstanceProfileCache.Flush()
+
+	mfs, err := crmetrics.Registry.Gather()
+	if err != nil {
+		for _, mf := range mfs {
+			for _, metric := range mf.GetMetric() {
+				if metric != nil {
+					metric.Reset()
+				}
+			}
+		}
+	}
 }

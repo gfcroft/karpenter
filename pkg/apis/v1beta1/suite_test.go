@@ -22,21 +22,7 @@ import (
 	. "github.com/onsi/gomega"
 	. "knative.dev/pkg/logging/testing"
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-	"github.com/aws/karpenter-core/pkg/apis"
-	"github.com/aws/karpenter-core/pkg/operator/scheme"
-	"github.com/aws/karpenter-core/pkg/test"
-	. "github.com/aws/karpenter-core/pkg/test/expectations"
-)
-
-var ctx context.Context
-var env *test.Environment
-=======
-	. "github.com/aws/karpenter-core/pkg/test/expectations"
-=======
 	. "sigs.k8s.io/karpenter/pkg/test/expectations"
->>>>>>> 6ebba50ce424ccd5e33b3c84b4f10a8e78d54539
 
 	"sigs.k8s.io/karpenter/pkg/operator/scheme"
 	coretest "sigs.k8s.io/karpenter/pkg/test"
@@ -48,21 +34,16 @@ var env *test.Environment
 var ctx context.Context
 var env *coretest.Environment
 var awsEnv *test.Environment
->>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
 
 func TestAPIs(t *testing.T) {
 	ctx = TestContextWithLogger(t)
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "v1beta1")
+	RunSpecs(t, "Validation")
 }
 
 var _ = BeforeSuite(func() {
-<<<<<<< HEAD
-	env = test.NewEnvironment(scheme.Scheme, test.WithCRDs(apis.CRDs...))
-=======
 	env = coretest.NewEnvironment(scheme.Scheme, coretest.WithCRDs(apis.CRDs...))
 	awsEnv = test.NewEnvironment(ctx, env)
->>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
 })
 
 var _ = AfterEach(func() {

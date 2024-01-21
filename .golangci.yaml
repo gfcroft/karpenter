@@ -4,9 +4,6 @@ run:
 
   timeout: 5m
 
-  build-tags:
-    - test_performance
-
   skip-dirs:
     - tools
     - website
@@ -42,13 +39,8 @@ linters-settings:
     check-shadowing: true
   revive:
     rules:
-<<<<<<< HEAD
-      - name: dot-imports
-        disabled: true
-=======
     - name: dot-imports
       disabled: true
->>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
   stylecheck:
     dot-import-whitelist:
       - "github.com/onsi/ginkgo/v2"
@@ -57,19 +49,15 @@ linters-settings:
     locale: US
     ignore-words: []
   goimports:
-<<<<<<< HEAD
-    local-prefixes: github.com/aws/karpenter-core
-=======
     local-prefixes: github.com/aws/karpenter-provider-aws
->>>>>>> 6ebba50ce424ccd5e33b3c84b4f10a8e78d54539
   goheader:
     template: |-
       Licensed under the Apache License, Version 2.0 (the "License");
       you may not use this file except in compliance with the License.
       You may obtain a copy of the License at
-
+      
           http://www.apache.org/licenses/LICENSE-2.0
-
+      
       Unless required by applicable law or agreed to in writing, software
       distributed under the License is distributed on an "AS IS" BASIS,
       WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -81,7 +69,5 @@ issues:
   exclude-rules:
   - linters:
     - goheader
-    path: 'zz_(.+)\.go'
-  - linters:
-    - goheader
-    path: 'scheduling_benchmark_test.go'
+    path: 'zz_(.+)\.go' 
+    

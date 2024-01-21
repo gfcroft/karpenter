@@ -3,19 +3,11 @@ description: 'Installs Go Downloads and installs Karpenter Dependencies'
 inputs:
   k8sVersion:
     description: Kubernetes version to use when installing the toolchain
-    default: "1.24.x"
+    default: "1.28.x"
 runs:
   using: "composite"
   steps:
-<<<<<<< HEAD
-<<<<<<< HEAD
-    - uses: actions/setup-go@93397bea11091df50f3d7e59dc26a7711a8bcfbe # v4.1.0
-=======
-    - uses: actions/setup-go@93397bea11091df50f3d7e59dc26a7711a8bcfbe # v4
->>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
-=======
     - uses: actions/setup-go@0c52d547c9bc32b1aa3301fd7a9cb496313a4491 # v5.0.0
->>>>>>> 6ebba50ce424ccd5e33b3c84b4f10a8e78d54539
       with:
         go-version-file: go.mod
         check-latest: true
@@ -23,15 +15,7 @@ runs:
     # Root path permission workaround for caching https://github.com/actions/cache/issues/845#issuecomment-1252594999
     - run: sudo chown "$USER" /usr/local
       shell: bash
-<<<<<<< HEAD
-<<<<<<< HEAD
-    - uses: actions/cache@704facf57e6136b1bc63b828d79edcd491f0ee84 # v3.3.2
-=======
-    - uses: actions/cache@704facf57e6136b1bc63b828d79edcd491f0ee84 # v3
->>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
-=======
     - uses: actions/cache@e12d46a63a90f2fae62d114769bbf2a179198b5c # v3.3.3
->>>>>>> 6ebba50ce424ccd5e33b3c84b4f10a8e78d54539
       id: cache-toolchain
       with:
         path: |
@@ -40,10 +24,6 @@ runs:
         key: ${{ runner.os }}-${{ inputs.k8sVersion }}-toolchain-cache-${{ hashFiles('hack/toolchain.sh') }}
     - if: ${{ steps.cache-toolchain.outputs.cache-hit != 'true' }}
       shell: bash
-<<<<<<< HEAD
-      run: K8S_VERSION=${{ inputs.k8sVersion }} make toolchain
-=======
       env:
         K8S_VERSION: ${{ inputs.k8sVersion }}
       run: make toolchain
->>>>>>> 6ebba50ce424ccd5e33b3c84b4f10a8e78d54539

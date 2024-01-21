@@ -1,20 +1,3 @@
-<<<<<<< HEAD
-help: ## Display help
-	@awk 'BEGIN {FS = ":.*##"; printf "Usage:\n  make \033[36m<target>\033[0m\n"} /^[a-zA-Z_0-9-]+:.*?##/ { printf "  \033[36m%-15s\033[0m %s\n", $$1, $$2 } /^##@/ { printf "\n\033[1m%s\033[0m\n", substr($$0, 5) } ' $(MAKEFILE_LIST)
-
-presubmit: verify test licenses vulncheck ## Run all steps required for code to be checked in
-
-test: ## Run tests
-	go test ./... \
-		-race \
-		-timeout 10m \
-		--ginkgo.focus="${FOCUS}" \
-		--ginkgo.timeout=10m \
-		--ginkgo.v \
-		-cover -coverprofile=coverage.out -outputdir=. -coverpkg=./...
-
-deflake: ## Run randomized, racing tests until the test fails to catch flakes
-=======
 export K8S_VERSION ?= 1.27.x
 CLUSTER_NAME ?= $(shell kubectl config view --minify -o jsonpath='{.clusters[].name}' | rev | cut -d"/" -f1 | rev | cut -d"." -f1)
 
@@ -109,18 +92,14 @@ deflake: ## Run randomized, racing, code-covered tests to deflake failures
 	for i in $(shell seq 1 5); do make test || exit 1; done
 
 deflake-until-it-fails: ## Run randomized, racing tests until the test fails to catch flakes
->>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
 	ginkgo \
 		--race \
 		--focus="${FOCUS}" \
-		--timeout=10m \
 		--randomize-all \
 		--until-it-fails \
 		-v \
 		./pkg/...
 
-<<<<<<< HEAD
-=======
 coverage:
 	go tool cover -html coverage.out -o coverage.html
 
@@ -141,34 +120,12 @@ verify: tidy download ## Verify code. Includes dependencies, linting, formatting
 	@find hack/code hack/docs -name "*.go" -type f -print0 | xargs -0 -I {} go build -o /dev/null {}
 	actionlint -oneline
 
->>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
 vulncheck: ## Verify code vulnerabilities
 	@govulncheck ./pkg/...
 
 licenses: download ## Verifies dependency licenses
 	! go-licenses csv ./... | grep -v -e 'MIT' -e 'Apache-2.0' -e 'BSD-3-Clause' -e 'BSD-2-Clause' -e 'ISC' -e 'MPL-2.0'
 
-<<<<<<< HEAD
-verify: ## Verify code. Includes codegen, dependencies, linting, formatting, etc
-	go mod tidy
-	go generate ./...
-	hack/validation/kubelet.sh
-	hack/validation/taint.sh
-	hack/validation/requirements.sh
-	hack/validation/labels.sh
-	@# Use perl instead of sed due to https://stackoverflow.com/questions/4247068/sed-command-with-i-option-failing-on-mac-but-works-on-linux
-	@# We need to do this "sed replace" until controller-tools fixes this parameterized types issue: https://github.com/kubernetes-sigs/controller-tools/issues/756
-	@perl -i -pe 's/sets.Set/sets.Set[string]/g' pkg/scheduling/zz_generated.deepcopy.go
-	hack/boilerplate.sh
-	go vet ./...
-	golangci-lint run
-	@git diff --quiet ||\
-		{ echo "New file modification detected in the Git working tree. Please check in before commit."; git --no-pager diff --name-only | uniq | awk '{print "  - " $$0}'; \
-		if [ "${CI}" = true ]; then\
-			exit 1;\
-		fi;}
-	actionlint -oneline
-=======
 setup: ## Sets up the IAM roles needed prior to deploying the karpenter-controller. This command only needs to be run once
 	CLUSTER_NAME=${CLUSTER_NAME} ./$(GETTING_STARTED_SCRIPT_DIR)/add-roles.sh $(KARPENTER_VERSION)
 
@@ -229,27 +186,17 @@ website: ## Serve the docs website locally
 
 tidy: ## Recursively "go mod tidy" on all directories where go.mod exists
 	$(foreach dir,$(MOD_DIRS),cd $(dir) && go mod tidy $(newline))
->>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
 
 download: ## Recursively "go mod download" on all directories where go.mod exists
 	$(foreach dir,$(MOD_DIRS),cd $(dir) && go mod download $(newline))
 
-<<<<<<< HEAD
-toolchain: ## Install developer toolchain
-	./hack/toolchain.sh
-=======
 update-karpenter: ## Update kubernetes-sigs/karpenter to latest
 	go get -u sigs.k8s.io/karpenter@HEAD
 	go mod tidy
->>>>>>> 6ebba50ce424ccd5e33b3c84b4f10a8e78d54539
 
-<<<<<<< HEAD
-.PHONY: help presubmit dev test verify toolchain
-=======
 .PHONY: help dev ci release test e2etests verify tidy download docgen codegen apply delete toolchain licenses vulncheck issues website nightly snapshot
 
 define newline
 
 
 endef
->>>>>>> 1db74f402628818c1f6ead391cc039d2834e7e13
