@@ -29,6 +29,12 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+/*
+	TODO GW 2 - this will all need to be updated to
+		- expect/find/grab the instance profile with the given identifying metadata
+		- check that latest isn't deleted and neither is old one when not older than res window
+		- check that is does get deleted when appropriate
+*/
 var _ = Describe("InstanceProfile Generation", func() {
 	It("should generate the InstanceProfile when setting the role", func() {
 		pod := coretest.Pod()

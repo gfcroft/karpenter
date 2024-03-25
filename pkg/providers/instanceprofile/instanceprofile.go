@@ -54,6 +54,17 @@ func (p *Provider) Create(ctx context.Context, nodeClass *v1beta1.EC2NodeClass) 
 		v1beta1.LabelNodeClass:                                                        nodeClass.Name,
 		v1.LabelTopologyRegion:                                                        p.region,
 	})
+	// TODO GW - (2) update - have to also handle when role has changed, and need to make new instance profile
+	/* 
+		TODO GW - (2) currently instance profiles are created with the same format template, and logic with this cache 
+		relies on 1:1 of nodeclass : instanceProfile
+		- could we handle this by suffixing instance profile names with either a
+		  1. series number
+		  2. timestamp
+		  3. short-random-hash/other??
+        - or (more likely) should we just change what we are doing here completely and use a different api to list all
+		  instance profiles with a specific tag (i.e. nodeclass == this)
+	*/
 	profileName := GetProfileName(ctx, p.region, nodeClass)
 
 	// An instance profile exists for this NodeClass

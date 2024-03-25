@@ -818,6 +818,7 @@ var _ = Describe("NodeClassController", func() {
 	Context("NodeClass Termination", func() {
 		var profileName string
 		BeforeEach(func() {
+			// TODO GW 2 - this will need to be changed
 			profileName = instanceprofile.GetProfileName(ctx, fake.DefaultRegion, nodeClass)
 		})
 		It("should not delete the NodeClass if launch template deletion fails", func() {
@@ -879,6 +880,7 @@ var _ = Describe("NodeClassController", func() {
 					},
 				},
 			}
+			// TODO GW 2 - this will need to be changed I think - seems to depend on instance profile having specific name
 			ExpectApplied(ctx, env.Client, nodeClass)
 			ExpectReconcileSucceeded(ctx, nodeClassController, client.ObjectKeyFromObject(nodeClass))
 			Expect(awsEnv.IAMAPI.InstanceProfiles).To(HaveLen(1))
@@ -894,6 +896,7 @@ var _ = Describe("NodeClassController", func() {
 					InstanceProfileName: aws.String(profileName),
 				},
 			}
+			// TODO GW 2 - this will need to be changed I think - seems to depend on instance profile having specific name
 			ExpectApplied(ctx, env.Client, nodeClass)
 			ExpectReconcileSucceeded(ctx, nodeClassController, client.ObjectKeyFromObject(nodeClass))
 			Expect(awsEnv.IAMAPI.InstanceProfiles).To(HaveLen(1))
@@ -988,9 +991,13 @@ var _ = Describe("NodeClassController", func() {
 			Expect(awsEnv.IAMAPI.RemoveRoleFromInstanceProfileBehavior.Calls()).To(BeZero())
 		})
 	})
+	It("should not fuly finalise the nodeclass until all instance profiles owned by nodeclass are removed", func(){
+		//TODO implement
+	})
 	Context("Instance Profile Status", func() {
 		var profileName string
 		BeforeEach(func() {
+			// TODO GW 2 - this will need to be changed I think 
 			profileName = instanceprofile.GetProfileName(ctx, fake.DefaultRegion, nodeClass)
 		})
 		It("should create the instance profile when it doesn't exist", func() {
@@ -1006,6 +1013,8 @@ var _ = Describe("NodeClassController", func() {
 			Expect(nodeClass.Status.InstanceProfile).To(Equal(profileName))
 		})
 		It("should add the role to the instance profile when it exists without a role", func() {
+			// TODO GW 2 - will this still happen with my changes? seems like there could be some issues
+			// around old intance profile just being abandoned, then garbage collected, rather than updated
 			awsEnv.IAMAPI.InstanceProfiles = map[string]*iam.InstanceProfile{
 				profileName: {
 					InstanceProfileId:   aws.String(fake.InstanceProfileID()),
@@ -1025,6 +1034,8 @@ var _ = Describe("NodeClassController", func() {
 			Expect(nodeClass.Status.InstanceProfile).To(Equal(profileName))
 		})
 		It("should update the role for the instance profile when the wrong role exists", func() {
+			// TODO GW 2 - will this still happen with my changes? seems like there could be some issues
+			// around old intance profile just being abandoned, then garbage collected, rather than updated
 			awsEnv.IAMAPI.InstanceProfiles = map[string]*iam.InstanceProfile{
 				profileName: {
 					InstanceProfileId:   aws.String(fake.InstanceProfileID()),
@@ -1073,6 +1084,7 @@ var _ = Describe("NodeClassController", func() {
 			Expect(awsEnv.IAMAPI.AddRoleToInstanceProfileBehavior.Calls()).To(BeZero())
 		})
 		It("should resolve the specified instance profile into the status when using instanceProfile field", func() {
+			// TODO GW 2 - should be fine, unless i change how this status field works
 			nodeClass.Spec.Role = ""
 			nodeClass.Spec.InstanceProfile = lo.ToPtr("test-instance-profile")
 			ExpectApplied(ctx, env.Client, nodeClass)
@@ -1089,6 +1101,25 @@ var _ = Describe("NodeClassController", func() {
 
 			Expect(awsEnv.IAMAPI.CreateInstanceProfileBehavior.Calls()).To(BeZero())
 			Expect(awsEnv.IAMAPI.AddRoleToInstanceProfileBehavior.Calls()).To(BeZero())
+		})
+	})
+	Context("Instance Profile Garbage Collection", func() {
+		var profileName string
+		BeforeEach(func() {
+			// TODO GW 2 - this will need to be changed I think 
+			profileName = instanceprofile.GetProfileName(ctx, fake.DefaultRegion, nodeClass)
+		})
+		It("should delete instance profile if no longer latest and not in use", func() {
+			fmt.Println(profileName)
+			//check instance
+		})
+		//TODO GW re-evaluate if this still makes sense after writing the above test
+		//TODO GW re-evaluate if some of this is best handled as an integration test (possibly?)
+		It("should not delete instance profile when in use or latest", func() {
+		})
+		It("should not delete instance profile if created within instance profile resolution window", func() {
+		})
+		It("should not delete instance profile if created within instance profile resolution window", func() {
 		})
 	})
 })

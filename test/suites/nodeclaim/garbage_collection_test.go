@@ -52,6 +52,7 @@ var _ = Describe("GarbageCollection", func() {
 		customAMI = env.GetCustomAMI("/aws/service/eks/optimized-ami/%s/amazon-linux-2/recommended/image_id", 1)
 		instanceProfileName = fmt.Sprintf("KarpenterNodeInstanceProfile-%s", env.ClusterName)
 		roleName = fmt.Sprintf("KarpenterNodeRole-%s", env.ClusterName)
+		// TODO GW 2 - update this to use the instance profile path thing/whatever we rely on to id instances
 		instanceInput = &ec2.RunInstancesInput{
 			InstanceType: aws.String("c5.large"),
 			IamInstanceProfile: &ec2.IamInstanceProfileSpecification{

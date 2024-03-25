@@ -87,6 +87,7 @@ func (c *Controller) Reconcile(ctx context.Context, nodeClass *v1beta1.EC2NodeCl
 		c.resolveAMIs(ctx, nodeClass),
 		c.resolveInstanceProfile(ctx, nodeClass),
 	)
+	// TODO GW - (2) add resolved instance profiles as an annotation on nodeclass? 
 	if !equality.Semantic.DeepEqual(stored, nodeClass) {
 		statusCopy := nodeClass.DeepCopy()
 		if patchErr := c.kubeClient.Patch(ctx, nodeClass, client.MergeFrom(stored)); err != nil {
@@ -115,6 +116,12 @@ func (c *Controller) Finalize(ctx context.Context, nodeClass *v1beta1.EC2NodeCla
 		c.recorder.Publish(WaitingOnNodeClaimTerminationEvent(nodeClass, lo.Map(nodeClaimList.Items, func(nc corev1beta1.NodeClaim, _ int) string { return nc.Name })))
 		return reconcile.Result{RequeueAfter: time.Minute * 10}, nil // periodically fire the event
 	}
+	// TODO GW (3) mop up the instance profiles here
+	// need a good way of NOT deleting the instance profile if it is too soon
+	// IF deletionTimestamp <= currentTime - resolution window, then we can't be confident that there haven't been any
+	// instances launched with this instance profile recently, so we should postpone... or do we never get to
+	// Finalizing the nodeclass until all the nodeClaims that could have been based off this have been terminated?
+	// (GW seems so - look at line:109! )
 	if nodeClass.Spec.Role != "" {
 		if err := c.instanceProfileProvider.Delete(ctx, nodeClass); err != nil {
 			return reconcile.Result{}, fmt.Errorf("deleting instance profile, %w", err)
@@ -205,6 +212,8 @@ func (c *Controller) resolveAMIs(ctx context.Context, nodeClass *v1beta1.EC2Node
 }
 
 func (c *Controller) resolveInstanceProfile(ctx context.Context, nodeClass *v1beta1.EC2NodeClass) error {
+	// TODO GW - (2) add resolved instance profiles into the instance profile as an annotation on nodeclass? 
+	// maybe get a list here, then add to the list of annotations
 	if nodeClass.Spec.Role != "" {
 		name, err := c.instanceProfileProvider.Create(ctx, nodeClass)
 		if err != nil {
