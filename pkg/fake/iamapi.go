@@ -17,6 +17,7 @@ package fake
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -34,6 +35,7 @@ const ()
 // pollute each other.
 type IAMAPIBehavior struct {
 	GetInstanceProfileBehavior            MockedFunction[iam.GetInstanceProfileInput, iam.GetInstanceProfileOutput]
+	ListInstanceProfilesBehavior          MockedFunction[iam.ListInstanceProfilesInput, iam.ListInstanceProfilesOutput]
 	CreateInstanceProfileBehavior         MockedFunction[iam.CreateInstanceProfileInput, iam.CreateInstanceProfileOutput]
 	DeleteInstanceProfileBehavior         MockedFunction[iam.DeleteInstanceProfileInput, iam.DeleteInstanceProfileOutput]
 	AddRoleToInstanceProfileBehavior      MockedFunction[iam.AddRoleToInstanceProfileInput, iam.AddRoleToInstanceProfileOutput]
@@ -57,6 +59,7 @@ func NewIAMAPI() *IAMAPI {
 // each other.
 func (s *IAMAPI) Reset() {
 	s.GetInstanceProfileBehavior.Reset()
+	s.ListInstanceProfilesBehavior.Reset()
 	s.CreateInstanceProfileBehavior.Reset()
 	s.DeleteInstanceProfileBehavior.Reset()
 	s.AddRoleToInstanceProfileBehavior.Reset()
@@ -73,6 +76,23 @@ func (s *IAMAPI) GetInstanceProfileWithContext(_ context.Context, input *iam.Get
 			return &iam.GetInstanceProfileOutput{InstanceProfile: i}, nil
 		}
 		return nil, awserr.New(iam.ErrCodeNoSuchEntityException, fmt.Sprintf("Instance Profile %s cannot be found", aws.StringValue(input.InstanceProfileName)), nil)
+	})
+}
+
+func (s *IAMAPI) ListInstanceProfilesWithContext(_ context.Context, input *iam.ListInstanceProfilesInput, _ ...request.Option) (*iam.ListInstanceProfilesOutput, error) {
+	return s.ListInstanceProfilesBehavior.Invoke(input, func(profilesInput *iam.ListInstanceProfilesInput) (*iam.ListInstanceProfilesOutput, error) {
+		s.Lock()
+		defer s.Unlock()
+		var profiles []*iam.InstanceProfile
+
+		if input.PathPrefix != aws.String("") {
+			profiles = lo.Filter(lo.Values(s.InstanceProfiles), func(profile *iam.InstanceProfile, _ int) bool {
+				return strings.Contains(aws.StringValue(profile.Path), aws.StringValue(input.PathPrefix))
+			})
+		} else {
+			profiles = lo.Values(s.InstanceProfiles)
+		}
+		return &iam.ListInstanceProfilesOutput{InstanceProfiles: profiles}, nil
 	})
 }
 

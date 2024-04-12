@@ -101,7 +101,10 @@ func (c *CloudProvider) Create(ctx context.Context, nodeClaim *corev1beta1.NodeC
 		return i.Name == instance.Type
 	})
 	nc := c.instanceToNodeClaim(instance, instanceType)
-	nc.Annotations = lo.Assign(nc.Annotations, map[string]string{v1beta1.AnnotationEC2NodeClassHash: nodeClass.Hash()})
+	nc.Annotations = lo.Assign(nodeClass.Annotations, map[string]string{
+		v1beta1.AnnotationEC2NodeClassHash:        nodeClass.Hash(),
+		v1beta1.AnnotationEC2NodeClassHashVersion: v1beta1.EC2NodeClassHashVersion,
+	})
 	return nc, nil
 }
 
@@ -240,7 +243,7 @@ func (c *CloudProvider) resolveInstanceTypes(ctx context.Context, nodeClaim *cor
 	if err != nil {
 		return nil, fmt.Errorf("getting instance types, %w", err)
 	}
-	reqs := scheduling.NewNodeSelectorRequirements(nodeClaim.Spec.Requirements...)
+	reqs := scheduling.NewNodeSelectorRequirementsWithMinValues(nodeClaim.Spec.Requirements...)
 	return lo.Filter(instanceTypes, func(i *cloudprovider.InstanceType, _ int) bool {
 		return reqs.Compatible(i.Requirements, scheduling.AllowUndefinedWellKnownLabels) == nil &&
 			len(i.Offerings.Compatible(reqs).Available()) > 0 &&

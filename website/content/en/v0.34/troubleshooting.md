@@ -53,6 +53,18 @@ This can be resolved by creating the [Service Linked Role](https://docs.aws.amaz
 aws iam create-service-linked-role --aws-service-name spot.amazonaws.com
 ```
 
+### Failed Resolving STS Credentials with I/O Timeout
+
+```bash
+Checking EC2 API connectivity, WebIdentityErr: failed to retrieve credentials\ncaused by: RequestError: send request failed\ncaused by: Post \"https://sts.us-east-1.amazonaws.com/\": dial tcp: lookup sts.us-east-1.amazonaws.com: i/o timeout
+```
+
+If you see the error above when you attempt to install Karpenter, this indicates that Karpenter is unable to reach out to the STS endpoint due to failed DNS resolution. This can happen when Karpenter is running with `dnsPolicy: ClusterFirst` and your in-cluster DNS service is not yet running.
+
+You have two mitigations to resolve this error:
+1. Let Karpenter manage your in-cluster DNS service - You can let Karpenter manage your DNS application pods' capacity by changing Karpenter's `dnsPolicy` to be `Default` (run `--set dnsPolicy=Default` with a Helm installation). This ensures that Karpenter reaches out to the [VPC DNS service](https://docs.aws.amazon.com/vpc/latest/userguide/vpc-dns.html) when running its controllers, allowing Karpenter to start-up without the DNS application pods running, enabling Karpenter to manage the capacity for these pods. 
+2. Let MNG/Fargate manage your in-cluster DNS service - If running a cluster with MNG, ensure that your group has enough capacity to support the DNS application pods and ensure that the application has the correct tolerations to schedule against the capacity. If running a cluster with Fargate, ensure that you have a [fargate profile](https://docs.aws.amazon.com/eks/latest/userguide/fargate-profile.html) that selects against your DNS application pods.
+
 ### Karpenter Role names exceeding 64-character limit
 
 If you use a tool such as AWS CDK to generate your Kubernetes cluster name, when you add Karpenter to your cluster you could end up with a cluster name that is too long to incorporate into your KarpenterNodeRole name (which is limited to 64 characters).
@@ -105,14 +117,14 @@ Karpenter v0.26.1+ introduced the `karpenter-crd` helm chart. When installing th
 - In the case of `invalid ownership metadata; label validation error: missing key "app.kubernetes.io/managed-by": must be set to "Helm"` run:
 
 ```shell
-kubectl label crd awsnodetemplates.karpenter.k8s.aws provisioners.karpenter.sh machines.karpenter.sh app.kubernetes.io/managed-by=Helm --overwrite
+kubectl label crd ec2nodeclasses.karpenter.k8s.aws nodepools.karpenter.sh nodeclaims.karpenter.sh app.kubernetes.io/managed-by=Helm --overwrite
 ```
 
 - In the case of `annotation validation error: missing key "meta.helm.sh/release-namespace": must be set to "karpenter"` run:
 
 ```shell
-kubectl annotate crd awsnodetemplates.karpenter.k8s.aws provisioners.karpenter.sh machines.karpenter.sh meta.helm.sh/release-name=karpenter-crd --overwrite
-kubectl annotate crd awsnodetemplates.karpenter.k8s.aws provisioners.karpenter.sh machines.karpenter.sh meta.helm.sh/release-namespace=karpenter --overwrite
+kubectl annotate crd ec2nodeclasses.karpenter.k8s.aws nodepools.karpenter.sh nodeclaims.karpenter.sh meta.helm.sh/release-name=karpenter-crd --overwrite
+kubectl annotate crd ec2nodeclasses.karpenter.k8s.aws nodepools.karpenter.sh nodeclaims.karpenter.sh meta.helm.sh/release-namespace=karpenter --overwrite
 ```
 
 ## Uninstallation
@@ -284,7 +296,23 @@ Karpenter does not support [in-tree storage plugins](https://kubernetes.io/blog/
 
 #### Pods were scheduled due to a race condition in Kubernetes
 
-Due to [this race condition in Kubernetes](https://github.com/kubernetes/kubernetes/issues/95911), it's possible that the scheduler and the CSINode can race during node registration such that the scheduler assumes that a node can mount more volumes than the node attachments support. There is currently no solve for this problem other than enforcing `toplogySpreadConstraints` and `podAntiAffinity` on your workloads that use PVCs such that you attempt to reduce the number of PVCs that schedule to a given node.
+Due to [this race condition in Kubernetes](https://github.com/kubernetes/kubernetes/issues/95911), it's possible that the scheduler and the CSINode can race during node registration such that the scheduler assumes that a node can mount more volumes than the node attachments support. There is currently no universal solve for this problem other than enforcing `toplogySpreadConstraints` and `podAntiAffinity` on your workloads that use PVCs such that you attempt to reduce the number of PVCs that schedule to a given node.
+
+The following is a list of known CSI drivers which support a startupTaint to eliminate this issue:
+- [aws-ebs-csi-driver](https://github.com/kubernetes-sigs/aws-ebs-csi-driver/blob/master/docs/install.md#configure-node-startup-taint)
+- [aws-efs-csi-driver](https://github.com/kubernetes-sigs/aws-efs-csi-driver/tree/master/docs#configure-node-startup-taint)
+
+These taints should be configured via `startupTaints` on your `NodePool`. For example, to enable this for EBS, add the following to your `NodePool`:
+```yaml
+apiVersion: karpenter.sh/v1beta1
+kind: NodePool
+spec:
+  template:
+    spec:
+      startupTaints:
+        - key: ebs.csi.aws.com/agent-not-ready
+          effect: NoExecute
+```
 
 ### CNI is unable to allocate IPs to pods
 
@@ -642,7 +670,7 @@ Karpenter [doesn't currently support draining and terminating on spot rebalance 
 
 These two components do not share information between each other, meaning if you have drain and terminate functionality enabled on NTH, NTH may remove a node for a spot rebalance recommendation. Karpenter will replace the node to fulfill the pod capacity that was being fulfilled by the old node; however, Karpenter won't be aware of the reason that that node was terminated. This means that Karpenter may launch the same instance type that was just deprovisioned, causing a spot rebalance recommendation to be sent again. This can result in very short-lived instances where NTH continually removes nodes and Karpeneter re-launches the same instance type over and over again.
 
-Karpenter doesn't recommend reacting to spot rebalance recommendations when running Karpenter with spot nodes; however, if you absolutely require this functionality, note that the above scenario is possible. 
+Karpenter doesn't recommend reacting to spot rebalance recommendations when running Karpenter with spot nodes; however, if you absolutely require this functionality, note that the above scenario is possible.
 Spot instances are time limited and, therefore, interruptible. When a signal is sent by AWS, it triggers actions from NTH and Karpenter, where the former signals a shutdown and the later provisions, creating a recursive situation.
 This can be mitigated by either completely removing NTH or by setting the following values:
 

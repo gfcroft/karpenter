@@ -39,15 +39,16 @@ inputs:
     default: 'false'
   git_ref:
     description: "The git commit, tag, or branch to check out. Requires a corresponding Karpenter snapshot release"
-    required: false
   enable_local_zones:
     description: "Whether to include local zones in the VPC created for the cluster."
-    required: false
+    default: 'false'
+  cleanup:
+    description: "Whether to cleanup resources on failure"
     default: 'false'
 runs:
   using: "composite"
   steps:
-  - uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+  - uses: actions/checkout@9bb56186c3b09b4f86b1c65136769dd318469633 # v4.1.2
     with:
       ref: ${{ inputs.git_ref }}
   - uses: ./.github/actions/e2e/install-eksctl
@@ -86,6 +87,7 @@ runs:
       PRIVATE_CLUSTER: ${{ inputs.private_cluster }}
       GIT_REF:  ${{ inputs.git_ref }}
       ENABLE_LOCAL_ZONES: ${{ inputs.enable_local_zones }}
+      CLEANUP: ${{ inputs.cleanup }}
     run: |
       if [[ "$GIT_REF" == '' ]]; then
         GIT_REF=$(git rev-parse HEAD)
@@ -195,7 +197,12 @@ runs:
         yq -i '.managedNodeGroups[0].privateNetworking=true' clusterconfig.yaml
       fi
 
-      eksctl ${cmd} cluster -f clusterconfig.yaml
+      # Disable rollback of the CloudFormation on Create if we aren't cleaning up the run
+      if [[ $CLEANUP == 'false' ]] && [[ $cmd == 'create' ]]; then
+        eksctl ${cmd} cluster -f clusterconfig.yaml --cfn-disable-rollback
+      else
+        eksctl ${cmd} cluster -f clusterconfig.yaml
+      fi
 
       # Add the SQS and SSM VPC endpoints if we are creating a private cluster
       # We need to grab all of the VPC details for the cluster in order to add the endpoint
